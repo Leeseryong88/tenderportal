@@ -431,6 +431,11 @@ export const en = {
   'auth.err.disabled': 'This account has been disabled. Contact the Procurement team.',
   'auth.err.popupClosed': 'Sign-in was cancelled.',
   'auth.err.generic': 'Something went wrong. Please try again.',
+  'upload.err.forbidden':
+    'The file upload was not permitted. Refresh the page and try again; if it keeps failing, contact the administrator.',
+  'upload.err.canceled': 'The upload was canceled.',
+  'upload.err.quota': 'Storage capacity is full. Please contact the administrator.',
+  'upload.err.generic': 'The file could not be uploaded. Please try again.',
 
   'error.ORIGIN_FORBIDDEN': 'This request was blocked by the security policy. Reload the page and try again.',
   'error.UNAUTHENTICATED': 'Your session has ended. Please sign in again.',

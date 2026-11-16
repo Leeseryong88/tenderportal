@@ -41,7 +41,9 @@
      ```bash
      gcloud storage buckets update gs://<YOUR_STORAGE_BUCKET> --cors-file=storage.cors.json
      ```
-   - **중요 (Storage Rules의 Firestore 교차 조회 권한)**: `storage.rules`가 `firestore.get(...)`를 사용하므로, Firebase Console > Storage > Rules 또는 Google Cloud IAM에서 Firebase Storage 서비스 에이전트가 Firestore를 읽을 수 있는 교차 서비스 권한이 활성화되어 있는지 확인합니다(일반적으로 Firebase Console에서 Firestore 참조 규칙 배포 시 자동 연결 또는 안내 배너가 표시됨).
+   - **필수 (Storage Rules의 Firestore 교차 조회 권한)**: `storage.rules`가 `firestore.get(...)`로 멤버십·입찰 접근권을 확인하므로, Storage 서비스 에이전트 `service-<프로젝트번호>@gcp-sa-firebasestorage.iam.gserviceaccount.com`에 `roles/firebaserules.firestoreServiceAgent`(Firebase Rules Firestore Service Agent) 역할이 있어야 합니다. 이 역할이 없으면 규칙의 Firestore 조회가 모두 실패해 협력사 제출·관리자 RFP 업로드가 `storage/unauthorized`로 거부됩니다.
+     - Firebase CLI는 **대화형 터미널**에서 `deploy --only storage`를 실행하고 규칙 내용이 바뀌었을 때만 "Grant the new role?"을 묻습니다. CI·자동화 셸(비대화형)이나 규칙이 이미 최신이면 이 단계를 **조용히 건너뜁니다.**
+     - 확인/부여: Google Cloud Console > IAM 및 관리자 > IAM > "Google 제공 역할 부여 포함" 체크 후 위 서비스 에이전트에 해당 역할이 있는지 확인하고, 없으면 "액세스 권한 부여"로 추가합니다.
 5. **App Check 설정**
    - `Build > App Check`에서 Web App을 reCAPTCHA Enterprise로 등록하고 Site Key를 `NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY`에 설정합니다.
    - 개발용 Debug Token은 절대 운영 환경에 배포하지 않습니다.

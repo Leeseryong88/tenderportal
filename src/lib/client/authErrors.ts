@@ -18,9 +18,19 @@ const FIREBASE_AUTH_ERRORS: Record<string, I18nKey> = {
   'auth/user-mismatch': 'auth.err.invalidCredential',
 };
 
-/** Returns the i18n key for a Firebase Auth error, or null if the error is not a Firebase Auth error. */
+const FIREBASE_STORAGE_ERRORS: Record<string, I18nKey> = {
+  'storage/unauthorized': 'upload.err.forbidden',
+  'storage/unauthenticated': 'error.UNAUTHENTICATED',
+  'storage/canceled': 'upload.err.canceled',
+  'storage/retry-limit-exceeded': 'auth.err.network',
+  'storage/quota-exceeded': 'upload.err.quota',
+};
+
+/** Returns the i18n key for a Firebase Auth or Storage error, or null for anything else. */
 export function firebaseAuthErrorKey(error: unknown): I18nKey | null {
   const code = (error as { code?: unknown } | null)?.code;
-  if (typeof code !== 'string' || !code.startsWith('auth/')) return null;
-  return FIREBASE_AUTH_ERRORS[code] ?? 'auth.err.generic';
+  if (typeof code !== 'string') return null;
+  if (code.startsWith('auth/')) return FIREBASE_AUTH_ERRORS[code] ?? 'auth.err.generic';
+  if (code.startsWith('storage/')) return FIREBASE_STORAGE_ERRORS[code] ?? 'upload.err.generic';
+  return null;
 }

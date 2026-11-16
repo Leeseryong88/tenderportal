@@ -433,6 +433,11 @@ export const ko: Record<I18nKey, string> = {
   'auth.err.disabled': '사용 중지된 계정입니다. 구매팀에 문의하세요.',
   'auth.err.popupClosed': '로그인이 취소되었습니다.',
   'auth.err.generic': '문제가 발생했습니다. 다시 시도하세요.',
+  'upload.err.forbidden':
+    '파일 업로드 권한이 확인되지 않았습니다. 페이지를 새로고침한 뒤 다시 시도하고, 계속되면 관리자에게 문의하세요.',
+  'upload.err.canceled': '업로드가 취소되었습니다.',
+  'upload.err.quota': '저장 공간이 부족합니다. 관리자에게 문의하세요.',
+  'upload.err.generic': '파일을 업로드하지 못했습니다. 다시 시도하세요.',
 
   'error.ORIGIN_FORBIDDEN': '보안 정책에 의해 요청이 차단되었습니다. 페이지를 새로고침한 뒤 다시 시도하세요.',
   'error.UNAUTHENTICATED': '로그인 세션이 만료되었습니다. 다시 로그인하세요.',
