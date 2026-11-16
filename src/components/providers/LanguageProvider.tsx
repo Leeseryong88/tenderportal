@@ -1,19 +1,38 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { t, type Lang } from '@/i18n';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { errorMessage, t, tv, type Lang } from '@/i18n';
 import type { I18nKey } from '@/i18n/en';
+import { ApiClientError } from '@/lib/client/api';
+import { firebaseAuthErrorKey } from '@/lib/client/authErrors';
 
 interface LanguageContextValue {
   lang: Lang;
   setLang: (next: Lang) => void;
   tr: (key: I18nKey, vars?: Record<string, string | number>) => string;
+  /** Translate a stored value such as an NDA status; unknown values are shown as-is. */
+  trv: (prefix: string, value: string | null | undefined) => string;
+  /** User-facing message for any thrown error (API error codes are localized). */
+  trError: (error: unknown) => string;
+}
+
+function buildHelpers(lang: Lang) {
+  const tr = (key: I18nKey, vars?: Record<string, string | number>) => t(lang, key, vars);
+  const trv = (prefix: string, value: string | null | undefined) => tv(lang, prefix, value);
+  const trError = (error: unknown) => {
+    if (error instanceof ApiClientError) return errorMessage(lang, error.code, error.message);
+    const authKey = firebaseAuthErrorKey(error);
+    if (authKey) return t(lang, authKey);
+    if (error instanceof Error && error.message) return error.message;
+    return t(lang, 'auth.err.generic');
+  };
+  return { tr, trv, trError };
 }
 
 const LanguageContext = createContext<LanguageContextValue>({
   lang: 'ko',
   setLang: () => {},
-  tr: (key, vars) => t('ko', key, vars),
+  ...buildHelpers('ko'),
 });
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
@@ -43,10 +62,10 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const tr = (key: I18nKey, vars?: Record<string, string | number>) => t(lang, key, vars);
+  const helpers = useMemo(() => buildHelpers(lang), [lang]);
 
   return (
-    <LanguageContext.Provider value={{ lang, setLang, tr }}>
+    <LanguageContext.Provider value={{ lang, setLang, ...helpers }}>
       {children}
     </LanguageContext.Provider>
   );

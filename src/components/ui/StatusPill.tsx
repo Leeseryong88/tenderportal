@@ -4,77 +4,83 @@ import React from 'react';
 import { useLanguage } from '@/components/providers/LanguageProvider';
 import type { I18nKey } from '@/i18n/en';
 
+type PillKind = 'scan';
+
+const GREEN = new Set([
+  'OPEN',
+  'Open',
+  'In Progress',
+  'Active',
+  'ACTIVE',
+  'Signed',
+  'Current',
+  'Not Required',
+  'SUBMITTED',
+  'CLEAN',
+  'DIRECT',
+]);
+const BLUE = new Set(['RECEIVING', 'CLOSED', 'Closed', 'Completed']);
+const RED = new Set([
+  'Not Signed',
+  'REJECTED',
+  'DISABLED',
+  'INFECTED',
+  'FAILED',
+  'UNAVAILABLE',
+  'Inactive',
+  'Renewal Pending',
+]);
+
+const KEY_MAP: Record<string, I18nKey> = {
+  DRAFT: 'tenders.status.DRAFT',
+  OPEN: 'tenders.status.OPEN',
+  RECEIVING: 'tenders.status.RECEIVING',
+  CLOSED: 'tenders.status.CLOSED',
+  PENDING: 'status.PENDING',
+  ACTIVE: 'status.ACTIVE',
+  REJECTED: 'status.REJECTED',
+  DISABLED: 'status.DISABLED',
+  DIRECT: 'suppliers.delivery.DIRECT',
+  LOCAL_PARTNER: 'suppliers.delivery.LOCAL_PARTNER',
+  UNAVAILABLE: 'suppliers.delivery.UNAVAILABLE',
+  NOT_SUBMITTED: 'supplierPortal.ownState.NOT_SUBMITTED',
+  SUBMITTED: 'supplierPortal.ownState.SUBMITTED',
+  CLEAN: 'scan.CLEAN',
+  INFECTED: 'scan.INFECTED',
+  FAILED: 'scan.FAILED',
+};
+
+const VALUE_PREFIXES = ['projectStatus', 'companyStatus', 'nda', 'license', 'priority'];
+
 export function StatusPill({
   status,
   labelOverride,
+  kind,
 }: {
   status: string;
   labelOverride?: string;
+  /** Disambiguates codes shared across domains, e.g. scan `PENDING` vs account `PENDING`. */
+  kind?: PillKind;
 }) {
-  const { tr, lang } = useLanguage();
+  const { tr, trv } = useLanguage();
 
-  const tone =
-    status === 'OPEN' ||
-    status === 'Open' ||
-    status === 'In Progress' ||
-    status === 'Active' ||
-    status === 'ACTIVE' ||
-    status === 'Signed' ||
-    status === 'Not Required' ||
-    status === 'SUBMITTED' ||
-    status === 'CLEAN' ||
-    status === 'DIRECT'
-      ? 'green'
-      : status === 'RECEIVING' || status === 'CLOSED' || status === 'Closed'
-        ? 'blue'
-        : status === 'Not Signed' ||
-            status === 'REJECTED' ||
-            status === 'DISABLED' ||
-            status === 'INFECTED' ||
-            status === 'FAILED' ||
-            status === 'UNAVAILABLE'
-          ? 'red'
-          : 'amber';
-
-  const keyMap: Record<string, I18nKey> = {
-    DRAFT: 'tenders.status.DRAFT',
-    OPEN: 'tenders.status.OPEN',
-    RECEIVING: 'tenders.status.RECEIVING',
-    CLOSED: 'tenders.status.CLOSED',
-    PENDING: 'status.PENDING',
-    ACTIVE: 'status.ACTIVE',
-    REJECTED: 'status.REJECTED',
-    DISABLED: 'status.DISABLED',
-    DIRECT: 'suppliers.delivery.DIRECT',
-    LOCAL_PARTNER: 'suppliers.delivery.LOCAL_PARTNER',
-    UNAVAILABLE: 'suppliers.delivery.UNAVAILABLE',
-    NOT_SUBMITTED: 'supplierPortal.ownState.NOT_SUBMITTED',
-    SUBMITTED: 'supplierPortal.ownState.SUBMITTED',
-  };
-
-  const koSimple: Record<string, string> = {
-    Planning: '기획',
-    'In Progress': '진행 중',
-    Completed: '완료',
-    Active: '활성',
-    Inactive: '비활성',
-    Signed: '체결',
-    'Not Signed': '미체결',
-    'Not Checked': '미확인',
-    'Not Required': '해당 없음',
-    CLEAN: '검사 완료',
-    INFECTED: '위험 탐지',
-    FAILED: '검사 실패',
-  };
+  const tone = GREEN.has(status) ? 'green' : BLUE.has(status) ? 'blue' : RED.has(status) ? 'red' : 'amber';
 
   let text = labelOverride || '';
   if (!text) {
-    if (keyMap[status]) {
-      text = tr(keyMap[status]);
-    } else if (lang === 'ko' && koSimple[status]) {
-      text = koSimple[status];
+    if (kind === 'scan') {
+      text = trv('scan', status);
+    } else if (KEY_MAP[status]) {
+      text = tr(KEY_MAP[status]);
     } else {
       text = status;
+      for (const prefix of VALUE_PREFIXES) {
+        const translated = trv(prefix, status);
+        if (translated !== status) {
+          text = translated;
+          break;
+        }
+      }
     }
   }
 

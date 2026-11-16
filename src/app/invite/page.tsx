@@ -9,7 +9,7 @@ import { LanguageSwitcher, useLanguage } from '@/components/providers/LanguagePr
 function InviteLandingInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const { lang } = useLanguage();
+  const { lang, trError } = useLanguage();
 
   const [token, setToken] = useState<string>('');
   const [state, setState] = useState<'loading' | 'unauthenticated' | 'pending' | 'ready' | 'error'>('loading');
@@ -86,12 +86,12 @@ function InviteLandingInner() {
           return;
         }
         setState('error');
-        setErrorMsg(err instanceof Error ? err.message : 'Invitation verification failed.');
+        setErrorMsg(trError(err));
       }
     };
 
     void checkAndClaim();
-  }, [token, router, lang]);
+  }, [token, router, lang, trError]);
 
   return (
     <div className="auth-page">

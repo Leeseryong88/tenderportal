@@ -7,7 +7,7 @@ import { getFirebaseClientAuth } from '@/lib/firebase/client';
 import { LanguageSwitcher, useLanguage } from '@/components/providers/LanguageProvider';
 
 export default function ForgotPasswordPage() {
-  const { tr } = useLanguage();
+  const { tr, trError } = useLanguage();
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
@@ -21,7 +21,12 @@ export default function ForgotPasswordPage() {
       await sendPasswordResetEmail(getFirebaseClientAuth(), email.trim());
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send reset email.');
+      // Do not reveal whether an account exists for this email.
+      if ((err as { code?: string })?.code === 'auth/user-not-found') {
+        setSent(true);
+        return;
+      }
+      setError(trError(err));
     } finally {
       setLoading(false);
     }
@@ -37,7 +42,8 @@ export default function ForgotPasswordPage() {
         <h1 style={{ fontSize: 20, margin: '0 0 8px' }}>{tr('auth.resetPasswordTitle')}</h1>
         {sent ? (
           <div className="notice">
-            If an account exists for {email}, a password reset email has been sent.
+            <b style={{ display: 'block', marginBottom: 4, overflowWrap: 'anywhere' }}>{email}</b>
+            {tr('auth.resetSent')}
           </div>
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 12 }}>
@@ -52,7 +58,7 @@ export default function ForgotPasswordPage() {
             </div>
             {error && <div className="notice danger">{error}</div>}
             <button type="submit" className="btn primary" disabled={loading}>
-              {tr('auth.resetPasswordBtn')}
+              {loading ? tr('common.loading') : tr('auth.resetPasswordBtn')}
             </button>
           </form>
         )}

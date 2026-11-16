@@ -19,7 +19,7 @@ export function SupplierTendersClient({
   email: string;
   organizationName: string;
 }) {
-  const { lang, tr } = useLanguage();
+  const { lang, tr, trError } = useLanguage();
   const { showToast } = useToast();
   const [companyName, setCompanyName] = useState('');
   const [tenders, setTenders] = useState<SupplierTenderViewDTO[]>([]);
@@ -33,11 +33,11 @@ export function SupplierTendersClient({
       setCompanyName(res.companyName);
       setTenders(res.tenders);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load tenders', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, trError]);
 
   useEffect(() => {
     void loadTenders();
@@ -67,7 +67,7 @@ export function SupplierTendersClient({
         <div className="card stat">
           <div className="stat-label">{tr('supplierPortal.myInvitations')}</div>
           <div className="stat-value">{tenders.length}</div>
-          <div className="stat-foot">Assigned tenders</div>
+          <div className="stat-foot">{tr('supplierPortal.assigned')}</div>
         </div>
         <div className="card stat">
           <div className="stat-label">{tr('supplierPortal.actionRequired')}</div>
@@ -84,7 +84,7 @@ export function SupplierTendersClient({
           <div className="stat-value" style={{ fontSize: 18, marginTop: 15 }}>
             {tr('supplierPortal.authenticated')}
           </div>
-          <div className="stat-foot">Isolated company scope</div>
+          <div className="stat-foot">{tr('supplierPortal.isolated')}</div>
         </div>
       </section>
 
@@ -99,9 +99,7 @@ export function SupplierTendersClient({
             <div className="empty">{tr('common.loading')}</div>
           ) : tenders.length === 0 ? (
             <div className="empty">
-              {lang === 'ko'
-                ? '배정된 초청 입찰이 없습니다.'
-                : 'You do not have any assigned tender invitations yet.'}
+              {tr('supplierPortal.noTenders')}
             </div>
           ) : (
             <table>
@@ -123,7 +121,7 @@ export function SupplierTendersClient({
                       <span className="primary-text">{t.name}</span>
                       <span className="secondary">{t.code}</span>
                     </td>
-                    <td>
+                    <td className="cell-wrap">
                       {t.projectName}
                       <span className="secondary">{t.projectLocation}</span>
                     </td>
@@ -147,9 +145,7 @@ export function SupplierTendersClient({
                         className={`btn small ${t.windowState === 'OPEN' ? 'primary' : ''}`}
                       >
                         {t.ownSubmissionState === 'SUBMITTED'
-                          ? lang === 'ko'
-                            ? '제출자료 보기'
-                            : 'View submission'
+                          ? tr('supplierPortal.viewSubmission')
                           : tr('tenders.open')}
                       </Link>
                     </td>

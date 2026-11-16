@@ -108,7 +108,10 @@ export function PortalShell({
           <div className="profile">
             <div className="avatar">{initial}</div>
             <div style={{ minWidth: 0 }}>
-              <b style={{ fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <b
+                title={displayName}
+                style={{ fontSize: 13, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              >
                 {displayName}
               </b>
               <small>{tr(roleLabelKey)}</small>
@@ -128,11 +131,11 @@ export function PortalShell({
 
       <main className="main">
         <header className="topbar">
-          <div className="crumb">
-            {organizationName} <span style={{ color: '#c3c7c4' }}>/</span> <b>{crumbTitle}</b>
+          <div className="crumb" title={`${organizationName} / ${crumbTitle}`}>
+            {organizationName} <span style={{ color: '#aab0ac' }}>/</span> <b>{crumbTitle}</b>
           </div>
           <div className="top-actions">
-            <span className="top-user">{email}</span>
+            <span className="top-user" title={email}>{email}</span>
             <LanguageSwitcher />
           </div>
         </header>

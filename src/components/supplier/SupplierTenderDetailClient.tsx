@@ -10,9 +10,20 @@ import { formatDateTimeInZone } from '@/lib/domain/timezone';
 import { PortalShell } from '@/components/layout/PortalShell';
 import { useLanguage } from '@/components/providers/LanguageProvider';
 import { useToast } from '@/components/providers/ToastProvider';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { DownloadButton } from '@/components/ui/DownloadButton';
 import { StatusPill } from '@/components/ui/StatusPill';
 import type { SupplierTenderViewDTO } from '@/types/domain';
 import type { I18nKey } from '@/i18n/en';
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function fileKey(f: File): string {
+  return `${f.name}:${f.size}:${f.lastModified}`;
+}
 
 export function SupplierTenderDetailClient({
   tenderId,
@@ -25,13 +36,14 @@ export function SupplierTenderDetailClient({
   email: string;
   organizationName: string;
 }) {
-  const { lang, tr } = useLanguage();
+  const { lang, tr, trv, trError } = useLanguage();
   const { showToast } = useToast();
 
   const [tender, setTender] = useState<SupplierTenderViewDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [reviewing, setReviewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [progressText, setProgressText] = useState('');
 
@@ -43,27 +55,50 @@ export function SupplierTenderDetailClient({
       setTender(res.tender);
       setError('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load tender.');
+      setError(trError(err));
     } finally {
       setLoading(false);
     }
-  }, [tenderId]);
+  }, [tenderId, trError]);
 
   useEffect(() => {
     void loadTender();
   }, [loadTender]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (!submitting) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [submitting]);
+
+  const addFiles = (picked: File[]) => {
+    setSelectedFiles((prev) => {
+      const seen = new Set(prev.map(fileKey));
+      return [...prev, ...picked.filter((f) => !seen.has(fileKey(f)))];
+    });
+  };
+
+  const removeFile = (key: string) => {
+    setSelectedFiles((prev) => prev.filter((f) => fileKey(f) !== key));
+  };
+
+  const handleReview = (e: React.FormEvent) => {
     e.preventDefault();
     if (!tender || tender.windowState === 'CLOSED') return;
     if (!selectedFiles.length) {
-      showToast(
-        lang === 'ko' ? '제출할 파일을 선택하세요.' : 'Select one or more files to submit.',
-        'error'
-      );
+      showToast(tr('supplierPortal.noFilesSelected'), 'error');
       return;
     }
+    setReviewing(true);
+  };
 
+  const executeSubmit = async () => {
+    if (!tender || !selectedFiles.length) return;
+    setReviewing(false);
     setSubmitting(true);
     setProgressText('');
 
@@ -73,9 +108,8 @@ export function SupplierTenderDetailClient({
 
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i]!;
-        setProgressText(
-          `${lang === 'ko' ? '업로드 준비 중' : 'Preparing upload'} (${i + 1}/${selectedFiles.length}): ${file.name}`
-        );
+        const position = `(${i + 1}/${selectedFiles.length})`;
+        setProgressText(`${tr('supplierPortal.preparing')} ${position}: ${file.name}`);
 
         const intent = await apiFetch<{
           intentId: string;
@@ -96,7 +130,7 @@ export function SupplierTenderDetailClient({
             'state_changed',
             (snap) => {
               const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
-              setProgressText(`${file.name}: ${pct}%`);
+              setProgressText(`${tr('common.uploading')} ${position} ${file.name}: ${pct}%`);
             },
             (err) => reject(err),
             () => resolve()
@@ -106,7 +140,7 @@ export function SupplierTenderDetailClient({
         intentIds.push(intent.intentId);
       }
 
-      setProgressText(lang === 'ko' ? '서버 접수 확정 중...' : 'Finalizing server submission...');
+      setProgressText(tr('supplierPortal.finalizing'));
       const idempotencyKey =
         typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID()
@@ -119,16 +153,14 @@ export function SupplierTenderDetailClient({
         body: JSON.stringify({ intentIds, idempotencyKey }),
       });
 
-      // Only show success toast AFTER server transaction commits!
+      // Only report success after the server transaction has committed.
       setSelectedFiles([]);
       setProgressText('');
-      showToast(
-        `${lang === 'ko' ? '제출이 접수되었습니다' : 'Submission received'}: ${finalized.submission.receiptNumber}`
-      );
+      showToast(`${tr('supplierPortal.success')}: ${finalized.submission.receiptNumber}`);
       await loadTender();
     } catch (err) {
       setProgressText('');
-      showToast(err instanceof Error ? err.message : 'Submission failed.', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -151,7 +183,7 @@ export function SupplierTenderDetailClient({
       {loading ? (
         <div className="card panel empty">{tr('common.loading')}</div>
       ) : error || !tender ? (
-        <div className="notice danger">{error || 'Access denied.'}</div>
+        <div className="notice danger">{error || tr('error.TENDER_ACCESS_DENIED')}</div>
       ) : (
         <>
           <div className="heading">
@@ -161,7 +193,7 @@ export function SupplierTenderDetailClient({
                 {tender.code} · {tender.projectName} ({tender.projectLocation})
               </p>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <StatusPill
                 status={tender.windowState}
                 labelOverride={tr(`supplierPortal.window.${tender.windowState}`)}
@@ -176,7 +208,7 @@ export function SupplierTenderDetailClient({
           <div className="grid">
             <section className="card panel">
               <div className="panel-title" style={{ marginBottom: 10 }}>
-                Tender Summary
+                {tr('supplierPortal.summary')}
               </div>
               <div className="detail-row">
                 <span>{tr('tenders.deadline')}</span>
@@ -184,14 +216,14 @@ export function SupplierTenderDetailClient({
               </div>
               <div className="detail-row">
                 <span>{tr('tenders.type')}</span>
-                <b>{tender.type}</b>
+                <b>{trv('category', tender.type)}</b>
               </div>
               <div className="detail-row">
                 <span>{tr('tenders.requiredDocs')}</span>
                 <b>{tender.requiredDocuments || '—'}</b>
               </div>
               {tender.description && (
-                <div className="notice" style={{ marginTop: 10 }}>
+                <div className="notice" style={{ marginTop: 10, whiteSpace: 'pre-wrap' }}>
                   {tender.description}
                 </div>
               )}
@@ -221,21 +253,14 @@ export function SupplierTenderDetailClient({
                 {tr('tenders.rfpDocs')}
               </div>
               {tender.rfpFiles.length === 0 ? (
-                <div className="subtle">No published RFP files yet.</div>
+                <div className="subtle">{tr('supplierPortal.noRfp')}</div>
               ) : (
                 tender.rfpFiles.map((f) => (
                   <div key={f.fileId} className="detail-row">
                     <span>
-                      {f.originalName} ({Math.max(1, Math.round(f.sizeBytes / 1024))} KB)
+                      {f.originalName} <small className="subtle">({formatSize(f.sizeBytes)})</small>
                     </span>
-                    <a
-                      className="btn small"
-                      href={`/api/files/${f.fileId}/download`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      ↓ {tr('common.download')}
-                    </a>
+                    <DownloadButton fileId={f.fileId} fileName={f.originalName} />
                   </div>
                 ))
               )}
@@ -243,7 +268,9 @@ export function SupplierTenderDetailClient({
               <hr style={{ border: 0, borderTop: '1px solid var(--line)', margin: '18px 0' }} />
 
               <div className="panel-title" style={{ marginBottom: 10 }}>
-                {tr('supplierPortal.submitProposal')}
+                {tender.ownSubmissionState === 'SUBMITTED'
+                  ? tr('supplierPortal.resubmitProposal')
+                  : tr('supplierPortal.submitProposal')}
               </div>
 
               {tender.ownSubmissionState === 'SUBMITTED' && (
@@ -255,36 +282,58 @@ export function SupplierTenderDetailClient({
                   {tr('supplierPortal.acceptedAt')}:{' '}
                   {formatDateTimeInZone(tender.latestSubmittedAt, tender.timeZone, lang)} (v
                   {tender.latestVersionNumber})
+                  <br />
+                  {tr('supplierPortal.resubmitNotice')}
                 </div>
               )}
 
               {tender.windowState === 'CLOSED' ? (
-                <div className="notice warn">
-                  {lang === 'ko'
-                    ? '입찰 마감되었습니다. 신규 제출이 비활성화되어 있습니다.'
-                    : 'This tender is closed. New submissions are disabled.'}
-                </div>
+                <div className="notice warn">{tr('supplierPortal.closedNotice')}</div>
               ) : (
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleReview}>
                   <div className="upload-zone">
                     <input
                       type="file"
                       multiple
                       disabled={submitting}
-                      onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))}
+                      onChange={(e) => {
+                        const picked = Array.from(e.target.files || []);
+                        e.target.value = '';
+                        addFiles(picked);
+                      }}
                       data-testid="supplier-file-input"
                     />
-                    <div style={{ marginTop: 8 }}>
-                      {selectedFiles.length
-                        ? selectedFiles.map((f) => f.name).join(', ')
-                        : lang === 'ko'
-                          ? '제출할 제안서 및 견적 파일을 선택하세요 (API 서버를 거치지 않고 암호화 스토리지로 직접 전송됩니다)'
-                          : 'Choose proposal & quotation files (uploaded directly to encrypted storage)'}
-                    </div>
+                    <div style={{ marginTop: 8 }}>{tr('supplierPortal.chooseFiles')}</div>
                   </div>
 
+                  {selectedFiles.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <b style={{ fontSize: 13 }}>
+                        {tr('supplierPortal.selectedFiles')} ({selectedFiles.length})
+                      </b>
+                      <ul className="file-review-list">
+                        {selectedFiles.map((f) => (
+                          <li key={fileKey(f)}>
+                            <span>
+                              {f.name}
+                              <small>{formatSize(f.size)}</small>
+                            </span>
+                            <button
+                              type="button"
+                              className="btn small"
+                              disabled={submitting}
+                              onClick={() => removeFile(fileKey(f))}
+                            >
+                              {tr('supplierPortal.removeFile')}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
                   {progressText && (
-                    <div className="notice" style={{ marginTop: 10 }}>
+                    <div className="notice" style={{ marginTop: 10 }} aria-live="polite">
                       {progressText}
                     </div>
                   )}
@@ -309,7 +358,7 @@ export function SupplierTenderDetailClient({
               {tender.submissionHistory.length > 0 && (
                 <div style={{ marginTop: 18 }}>
                   <div className="panel-title" style={{ marginBottom: 8 }}>
-                    Submission Receipts & History
+                    {tr('supplierPortal.history')}
                   </div>
                   {tender.submissionHistory.map((ver) => (
                     <div key={ver.versionId} className="detail-box">
@@ -324,16 +373,9 @@ export function SupplierTenderDetailClient({
                       {ver.files.map((f) => (
                         <div key={f.fileId} className="detail-row">
                           <span>
-                            {f.originalName} <StatusPill status={f.scanStatus} />
+                            {f.originalName} <StatusPill status={f.scanStatus} kind="scan" />
                           </span>
-                          <a
-                            className="btn small"
-                            href={`/api/files/${f.fileId}/download`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            ↓ {tr('common.download')}
-                          </a>
+                          <DownloadButton fileId={f.fileId} fileName={f.originalName} scanStatus={f.scanStatus} />
                         </div>
                       ))}
                     </div>
@@ -342,6 +384,30 @@ export function SupplierTenderDetailClient({
               )}
             </section>
           </div>
+
+          {reviewing && (
+            <ConfirmDialog
+              title={tr('supplierPortal.reviewTitle')}
+              body={tr('supplierPortal.reviewDesc')}
+              confirmLabel={tr('supplierPortal.confirmSubmit')}
+              onCancel={() => setReviewing(false)}
+              onConfirm={() => void executeSubmit()}
+            >
+              <ul className="file-review-list" data-testid="submission-review-list">
+                {selectedFiles.map((f) => (
+                  <li key={fileKey(f)}>
+                    <span>
+                      {f.name}
+                      <small>{formatSize(f.size)}</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {tender.ownSubmissionState === 'SUBMITTED' && (
+                <div className="notice warn">{tr('supplierPortal.resubmitNotice')}</div>
+              )}
+            </ConfirmDialog>
+          )}
         </>
       )}
     </PortalShell>

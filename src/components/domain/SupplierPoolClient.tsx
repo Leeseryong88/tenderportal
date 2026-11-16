@@ -34,6 +34,28 @@ const CATEGORY_OPTIONS = [
   'Other Services',
 ];
 
+const LICENSE_OPTIONS: LicenseStatus[] = [
+  'Current',
+  'Renewal Planned',
+  'Renewal Pending',
+  'Not Required',
+  'Not Tracked',
+];
+
+const NDA_OPTIONS: NdaStatus[] = ['Not Checked', 'Not Signed', 'Signed', 'Not Required'];
+
+function safeWebsiteHref(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 type SupplierPoolItem = SupplierRecord | SupplierDirectoryDTO;
 
 export function SupplierPoolClient({
@@ -47,7 +69,7 @@ export function SupplierPoolClient({
   email: string;
   organizationName: string;
 }) {
-  const { lang, tr } = useLanguage();
+  const { lang, tr, trv, trError } = useLanguage();
   const { showToast } = useToast();
   const canManage = role === 'ADMIN';
 
@@ -100,17 +122,21 @@ export function SupplierPoolClient({
       const res = await apiFetch<{ suppliers: SupplierPoolItem[] }>(endpoint);
       setSuppliers(res.suppliers);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load suppliers', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setLoading(false);
     }
-  }, [canManage, showToast]);
+  }, [canManage, showToast, trError]);
 
   useEffect(() => {
     void loadSuppliers();
   }, [loadSuppliers]);
 
   const allCountries = useMemo(() => getCountryAlpha2List(), []);
+  const sortedSuppliers = useMemo(
+    () => [...suppliers].sort((a, b) => a.name.localeCompare(b.name)),
+    [suppliers]
+  );
   const usStates = useMemo(() => getUsStateList(), []);
 
   // Filter logic (separates HQ country field from coverage country/subdivision filter)
@@ -297,7 +323,7 @@ export function SupplierPoolClient({
       setShowEditor(false);
       await loadSuppliers();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to save supplier', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setSaving(false);
     }
@@ -339,9 +365,7 @@ export function SupplierPoolClient({
 
       {!canManage && (
         <div className="notice">
-          {lang === 'ko'
-            ? '사용자부서는 승인된 협력사 Pool 디렉터리(업체 정보·유형·수행 지역·담당자·면허·NDA 체결상태)만 열람할 수 있습니다.'
-            : 'User Department accounts have read-only access to approved Supplier Pool directory fields only.'}
+          {tr('suppliers.deptNotice')}
         </div>
       )}
 
@@ -371,7 +395,7 @@ export function SupplierPoolClient({
           </div>
 
           <div className="field">
-            <label>U.S. State</label>
+            <label>{tr('suppliers.usState')}</label>
             <select
               value={fSubdivision}
               onChange={(e) => {
@@ -395,17 +419,17 @@ export function SupplierPoolClient({
               <option value="ALL">{tr('common.all')}</option>
               {CATEGORY_OPTIONS.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {trv('category', c)}
                 </option>
               ))}
             </select>
           </div>
 
           <div className="field">
-            <label>Company</label>
+            <label>{tr('suppliers.company')}</label>
             <select value={fVendor} onChange={(e) => setFVendor(e.target.value)}>
               <option value="ALL">{tr('common.all')}</option>
-              {suppliers.map((s) => (
+              {sortedSuppliers.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
@@ -414,7 +438,7 @@ export function SupplierPoolClient({
           </div>
 
           <div className="field">
-            <label>Delivery Mode</label>
+            <label>{tr('suppliers.deliveryMode')}</label>
             <select value={fDelivery} onChange={(e) => setFDelivery(e.target.value)}>
               <option value="ALL">{tr('common.all')}</option>
               <option value="DIRECT">{tr('suppliers.delivery.DIRECT')}</option>
@@ -424,16 +448,14 @@ export function SupplierPoolClient({
           </div>
 
           <div className="field">
-            <label>License</label>
+            <label>{tr('suppliers.licenseStatus')}</label>
             <select value={fLicense} onChange={(e) => setFLicense(e.target.value)}>
               <option value="ALL">{tr('common.all')}</option>
-              {['Current', 'Renewal Planned', 'Renewal Pending', 'Not Required', 'Not Tracked'].map(
-                (x) => (
-                  <option key={x} value={x}>
-                    {x}
-                  </option>
-                )
-              )}
+              {LICENSE_OPTIONS.map((x) => (
+                <option key={x} value={x}>
+                  {trv('license', x)}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -441,9 +463,9 @@ export function SupplierPoolClient({
             <label>{tr('suppliers.ndaStatus')}</label>
             <select value={fNda} onChange={(e) => setFNda(e.target.value)}>
               <option value="ALL">{tr('common.all')}</option>
-              {['Not Checked', 'Not Signed', 'Signed', 'Not Required'].map((x) => (
+              {NDA_OPTIONS.map((x) => (
                 <option key={x} value={x}>
-                  {x}
+                  {trv('nda', x)}
                 </option>
               ))}
             </select>
@@ -473,17 +495,17 @@ export function SupplierPoolClient({
             <div className="card pool-kpi">
               <label>{tr('suppliers.vendorsInView')}</label>
               <strong>{filteredSuppliers.length}</strong>
-              <span className="subtle">filtered</span>
+              <span className="subtle">{tr('suppliers.filteredSub')}</span>
             </div>
             <div className="card pool-kpi">
               <label>{tr('suppliers.countriesCovered')}</label>
               <strong>{uniqueHqCountries}</strong>
-              <span className="subtle">HQ countries</span>
+              <span className="subtle">{tr('suppliers.hqCountriesSub')}</span>
             </div>
             <div className="card pool-kpi">
               <label>{tr('suppliers.directCoverage')}</label>
               <strong>{directVendors}</strong>
-              <span className="subtle">Direct</span>
+              <span className="subtle">{tr('suppliers.directSub')}</span>
             </div>
             <div className="card pool-kpi">
               <label>{tr('suppliers.renewalWatch')}</label>
@@ -509,7 +531,7 @@ export function SupplierPoolClient({
                       setFSubdivision('ALL');
                     }}
                   >
-                    {lang === 'ko' ? '전체 세계 지도' : 'World view'}
+                    {tr('common.worldView')}
                   </button>
                 )}
               </div>
@@ -542,17 +564,18 @@ export function SupplierPoolClient({
             <div className="pool-directory-search">
               <select
                 className="filter"
+                aria-label={tr('suppliers.searchField')}
                 value={searchField}
                 onChange={(e) => setSearchField(e.target.value as typeof searchField)}
               >
-                <option value="name">Company</option>
-                <option value="country">HQ Country</option>
-                <option value="type">Type</option>
-                <option value="coverage">Coverage</option>
-                <option value="availability">Delivery Mode</option>
-                <option value="license">License</option>
-                <option value="nda">NDA</option>
-                <option value="status">Status</option>
+                <option value="name">{tr('suppliers.company')}</option>
+                <option value="country">{tr('suppliers.hqCountry')}</option>
+                <option value="type">{tr('suppliers.companyType')}</option>
+                <option value="coverage">{tr('suppliers.serviceCoverage')}</option>
+                <option value="availability">{tr('suppliers.deliveryMode')}</option>
+                <option value="license">{tr('suppliers.license')}</option>
+                <option value="nda">{tr('suppliers.ndaStatus')}</option>
+                <option value="status">{tr('suppliers.companyStatus')}</option>
               </select>
               <input
                 className="search"
@@ -572,13 +595,13 @@ export function SupplierPoolClient({
                 <table>
                   <thead>
                     <tr>
-                      <th>COMPANY</th>
-                      <th>HQ</th>
-                      <th>TYPE</th>
-                      <th>COVERAGE</th>
-                      <th>LICENSE</th>
+                      <th>{tr('suppliers.company')}</th>
+                      <th>{tr('suppliers.hqCountry')}</th>
+                      <th>{tr('suppliers.companyType')}</th>
+                      <th>{tr('suppliers.serviceCoverage')}</th>
+                      <th>{tr('suppliers.license')}</th>
                       <th>NDA</th>
-                      <th>STATUS</th>
+                      <th>{tr('common.status')}</th>
                       {canManage && <th />}
                     </tr>
                   </thead>
@@ -593,18 +616,21 @@ export function SupplierPoolClient({
                             <span>
                               <span className="primary-text">{s.name}</span>
                               <span className="secondary">
-                                {s.contacts[0]?.name || '—'} · {s.contacts[0]?.email || ''}
+                                {[s.contacts[0]?.name, s.contacts[0]?.email].filter(Boolean).join(' · ') ||
+                                  '—'}
                               </span>
                             </span>
                           </span>
                         </td>
                         <td>{countryDisplayName(s.countryCode, s.countryName, lang)}</td>
                         <td>
-                          {s.categories.map((cat) => (
-                            <span key={cat} className="pill" style={{ marginRight: 4 }}>
-                              {cat}
-                            </span>
-                          ))}
+                          <div className="coverage-cell">
+                            {s.categories.map((cat) => (
+                              <span key={cat} className="pill">
+                                {trv('category', cat)}
+                              </span>
+                            ))}
+                          </div>
                         </td>
                         <td>
                           <div className="coverage-cell">
@@ -627,8 +653,8 @@ export function SupplierPoolClient({
                             )}
                           </div>
                         </td>
-                        <td>
-                          {s.license || s.licenseStatus}
+                        <td className="cell-wrap">
+                          {s.license || trv('license', s.licenseStatus)}
                           {s.licenseExpiry && (
                             <span className="secondary">{s.licenseExpiry}</span>
                           )}
@@ -685,26 +711,39 @@ export function SupplierPoolClient({
               <b>{detailSupplier.ndaSignedDate || '—'}</b>
             </div>
             <div className="detail-row">
-              <span>Website</span>
-              <b>{detailSupplier.website || '—'}</b>
+              <span>{tr('suppliers.website')}</span>
+              <b>
+                {(() => {
+                  const href = safeWebsiteHref(detailSupplier.website || '');
+                  return href ? (
+                    <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--green)' }}>
+                      {detailSupplier.website}
+                    </a>
+                  ) : (
+                    detailSupplier.website || '—'
+                  );
+                })()}
+              </b>
             </div>
             <div className="detail-row">
-              <span>License</span>
+              <span>{tr('suppliers.license')}</span>
               <b>
-                {detailSupplier.license || detailSupplier.licenseStatus}{' '}
-                {detailSupplier.licenseExpiry ? `(${detailSupplier.licenseExpiry})` : ''}
+                {detailSupplier.license || '—'} · {trv('license', detailSupplier.licenseStatus)}
+                {detailSupplier.licenseExpiry ? ` (${detailSupplier.licenseExpiry})` : ''}
               </b>
             </div>
           </div>
 
           <div className="detail-box">
-            <b style={{ fontSize: 12 }}>{tr('suppliers.serviceCoverage')}</b>
+            <b style={{ fontSize: 13 }}>{tr('suppliers.serviceCoverage')}</b>
             {detailSupplier.coverage.map((c, idx) => (
               <div key={idx} className="detail-row">
                 <span>
                   {marketDisplayName(c, lang)}
                   {c.legacyValue && (
-                    <small className="secondary">Unmapped legacy: {c.legacyValue}</small>
+                    <small className="secondary">
+                      {tr('suppliers.legacyUnmapped')}: {c.legacyValue}
+                    </small>
                   )}
                 </span>
                 <StatusPill status={c.deliveryMode} />
@@ -713,10 +752,10 @@ export function SupplierPoolClient({
           </div>
 
           <div className="detail-box">
-            <b style={{ fontSize: 12 }}>{tr('suppliers.contacts')}</b>
+            <b style={{ fontSize: 13 }}>{tr('suppliers.contacts')}</b>
             {detailSupplier.contacts.length === 0 ? (
               <div className="subtle" style={{ paddingTop: 6 }}>
-                No contacts recorded.
+                {tr('suppliers.noContacts')}
               </div>
             ) : (
               detailSupplier.contacts.map((c, idx) => (
@@ -769,12 +808,12 @@ export function SupplierPoolClient({
           <form onSubmit={handleSaveSupplier}>
             <div className="form-grid">
               <div className="field full">
-                <label>Company name *</label>
+                <label>{tr('suppliers.companyName')} *</label>
                 <input required value={sName} onChange={(e) => setSName(e.target.value)} />
               </div>
 
               <div className="field">
-                <label>Head office country *</label>
+                <label>{tr('suppliers.hqCountry')} *</label>
                 <select value={sCountry} onChange={(e) => setSCountry(e.target.value)}>
                   {allCountries.map((c) => (
                     <option key={c.code} value={c.en}>
@@ -785,17 +824,17 @@ export function SupplierPoolClient({
               </div>
 
               <div className="field">
-                <label>Head office city</label>
+                <label>{tr('suppliers.hqCity')}</label>
                 <input value={sCity} onChange={(e) => setSCity(e.target.value)} />
               </div>
 
               <div className="field full">
-                <label>Company type *</label>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <label>{tr('suppliers.companyType')} *</label>
+                <div style={{ display: 'flex', gap: '8px 14px', flexWrap: 'wrap' }}>
                   {CATEGORY_OPTIONS.map((cat) => (
                     <label
                       key={cat}
-                      style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500 }}
                     >
                       <input
                         type="checkbox"
@@ -810,7 +849,7 @@ export function SupplierPoolClient({
                           )
                         }
                       />
-                      {cat}
+                      {trv('category', cat)}
                     </label>
                   ))}
                 </div>
@@ -822,9 +861,9 @@ export function SupplierPoolClient({
                   value={sNdaStatus}
                   onChange={(e) => setSNdaStatus(e.target.value as NdaStatus)}
                 >
-                  {['Not Checked', 'Not Signed', 'Signed', 'Not Required'].map((x) => (
+                  {NDA_OPTIONS.map((x) => (
                     <option key={x} value={x}>
-                      {x}
+                      {trv('nda', x)}
                     </option>
                   ))}
                 </select>
@@ -840,22 +879,23 @@ export function SupplierPoolClient({
               </div>
 
               <div className="field">
-                <label>Website</label>
+                <label>{tr('suppliers.website')}</label>
                 <input
                   type="url"
+                  placeholder="https://"
                   value={sWebsite}
                   onChange={(e) => setSWebsite(e.target.value)}
                 />
               </div>
 
               <div className="field">
-                <label>Status</label>
+                <label>{tr('suppliers.companyStatus')}</label>
                 <select
                   value={sStatus}
                   onChange={(e) => setSStatus(e.target.value as CompanyStatus)}
                 >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
+                  <option value="Active">{trv('companyStatus', 'Active')}</option>
+                  <option value="Inactive">{trv('companyStatus', 'Inactive')}</option>
                 </select>
               </div>
 
@@ -888,14 +928,14 @@ export function SupplierPoolClient({
                         );
                       }}
                     >
-                      <optgroup label="Countries">
+                      <optgroup label={tr('suppliers.countries')}>
                         {allCountries.map((c) => (
                           <option key={c.code} value={c.en}>
                             {lang === 'ko' ? c.ko : c.en}
                           </option>
                         ))}
                       </optgroup>
-                      <optgroup label="U.S. States">
+                      <optgroup label={tr('suppliers.usStates')}>
                         {usStates.map((st) => (
                           <option key={st.code} value={st.code}>
                             {lang === 'ko' ? `${st.ko} (${st.abbr})` : `${st.en} (${st.abbr})`}
@@ -931,7 +971,7 @@ export function SupplierPoolClient({
                 ))}
 
                 <div style={{ marginTop: 10 }}>
-                  <b style={{ fontSize: 11 }}>{tr('suppliers.coveragePreview')}</b>
+                  <b style={{ fontSize: 13 }}>{tr('suppliers.coveragePreview')}</b>
                   <SupplierCoverageMap
                     compact
                     suppliers={[{ id: 'preview', coverage: previewCoverage }]}
@@ -974,7 +1014,8 @@ export function SupplierPoolClient({
                       ))}
                     </select>
                     <input
-                      placeholder="City"
+                      placeholder={tr('common.city')}
+                      aria-label={tr('common.city')}
                       value={c.city}
                       onChange={(e) =>
                         setSContacts((prev) =>
@@ -983,7 +1024,8 @@ export function SupplierPoolClient({
                       }
                     />
                     <input
-                      placeholder="Name"
+                      placeholder={tr('common.name')}
+                      aria-label={tr('common.name')}
                       value={c.name}
                       onChange={(e) =>
                         setSContacts((prev) =>
@@ -993,7 +1035,8 @@ export function SupplierPoolClient({
                     />
                     <input
                       type="email"
-                      placeholder="Email"
+                      placeholder={tr('common.email')}
+                      aria-label={tr('common.email')}
                       value={c.email}
                       onChange={(e) =>
                         setSContacts((prev) =>
@@ -1002,7 +1045,8 @@ export function SupplierPoolClient({
                       }
                     />
                     <input
-                      placeholder="Phone"
+                      placeholder={tr('common.phone')}
+                      aria-label={tr('common.phone')}
                       value={c.phone}
                       onChange={(e) =>
                         setSContacts((prev) =>
@@ -1024,28 +1068,26 @@ export function SupplierPoolClient({
               </div>
 
               <div className="field">
-                <label>License No.</label>
+                <label>{tr('suppliers.licenseNo')}</label>
                 <input value={sLicense} onChange={(e) => setSLicense(e.target.value)} />
               </div>
 
               <div className="field">
-                <label>License status</label>
+                <label>{tr('suppliers.licenseStatus')}</label>
                 <select
                   value={sLicenseStatus}
                   onChange={(e) => setSLicenseStatus(e.target.value as LicenseStatus)}
                 >
-                  {['Current', 'Renewal Planned', 'Renewal Pending', 'Not Required', 'Not Tracked'].map(
-                    (x) => (
-                      <option key={x} value={x}>
-                        {x}
-                      </option>
-                    )
-                  )}
+                  {LICENSE_OPTIONS.map((x) => (
+                    <option key={x} value={x}>
+                      {trv('license', x)}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div className="field">
-                <label>License expiry</label>
+                <label>{tr('suppliers.licenseExpiry')}</label>
                 <input
                   type="date"
                   value={sLicenseExpiry}

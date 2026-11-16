@@ -17,7 +17,7 @@ export function AdminSettingsClient({
   email: string;
   organizationName: string;
 }) {
-  const { lang, tr } = useLanguage();
+  const { tr, trError } = useLanguage();
   const { showToast } = useToast();
 
   const [settings, setSettings] = useState<TenantSettings | null>(null);
@@ -43,8 +43,8 @@ export function AdminSettingsClient({
         setReadiness(res.runtimeReadiness);
         setExtText(res.settings.allowedExtensions.join(', '));
       })
-      .catch((err) => showToast(err instanceof Error ? err.message : 'Failed to load settings', 'error'));
-  }, [showToast]);
+      .catch((err) => showToast(trError(err), 'error'));
+  }, [showToast, trError]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,9 +68,9 @@ export function AdminSettingsClient({
         }),
       });
       setSettings(res.settings);
-      showToast(lang === 'ko' ? '설정을 저장했습니다.' : 'Settings saved.');
+      showToast(tr('settings.saved'));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to save settings', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setSaving(false);
     }
@@ -87,24 +87,25 @@ export function AdminSettingsClient({
       <div className="heading">
         <div>
           <h1>{tr('nav.settings')}</h1>
-          <p>
-            {lang === 'ko'
-              ? '운영 조직 표시 설정, 파일 업로드 제한(기술 기본값) 및 초청 유효기간을 관리합니다.'
-              : 'Configure organization display defaults, technical file upload limits, and invitation expiry.'}
-          </p>
+          <p>{tr('settings.sub')}</p>
         </div>
       </div>
 
       {readiness && (
         <div className={`notice ${readiness.malwareScannerMode === 'local_signature_dev' ? 'warn' : ''}`}>
-          <b>Runtime Security Readiness:</b> Malware scanner mode ={' '}
-          <code>{readiness.malwareScannerMode}</code> · App Check enforced ={' '}
-          <code>{String(readiness.appCheckRequired)}</code> · Emulator mode ={' '}
+          <b>{tr('settings.readiness')}</b>
+          <br />
+          Malware scanner: <code>{readiness.malwareScannerMode}</code> · App Check:{' '}
+          <code>{String(readiness.appCheckRequired)}</code> · Emulator:{' '}
           <code>{String(readiness.emulatorMode)}</code>
           <br />
-          {lang === 'ko'
-            ? 'API 키나 Service Account 비공개 키 등 인프라 비밀값은 웹 설정 화면에 저장하지 않으며 환경변수로 관리합니다.'
-            : 'Infrastructure secrets (service account keys) are never stored in web settings and must be configured via environment variables.'}
+          {tr('settings.secretsNotice')}
+        </div>
+      )}
+
+      {!settings && (
+        <div className="card">
+          <div className="empty">{tr('common.loading')}</div>
         </div>
       )}
 
@@ -112,7 +113,7 @@ export function AdminSettingsClient({
         <form className="card panel" onSubmit={handleSave}>
           <div className="form-grid">
             <div className="field">
-              <label>Organization Name</label>
+              <label>{tr('settings.orgName')}</label>
               <input
                 required
                 value={settings.organizationName}
@@ -123,7 +124,7 @@ export function AdminSettingsClient({
             </div>
 
             <div className="field">
-              <label>Display Time Zone (IANA)</label>
+              <label>{tr('settings.tz')}</label>
               <input
                 list="settings-tz-list"
                 required
@@ -140,7 +141,7 @@ export function AdminSettingsClient({
             </div>
 
             <div className="field">
-              <label>Default Language</label>
+              <label>{tr('settings.lang')}</label>
               <select
                 value={settings.defaultLanguage}
                 onChange={(e) =>
@@ -156,7 +157,7 @@ export function AdminSettingsClient({
             </div>
 
             <div className="field">
-              <label>Invite Link Expiry (days)</label>
+              <label>{tr('settings.inviteDays')}</label>
               <input
                 type="number"
                 min={1}
@@ -169,7 +170,7 @@ export function AdminSettingsClient({
             </div>
 
             <div className="field">
-              <label>Max File Size (MB, technical default: 50MB)</label>
+              <label>{tr('settings.maxFileMb')}</label>
               <input
                 type="number"
                 min={1}
@@ -182,7 +183,7 @@ export function AdminSettingsClient({
             </div>
 
             <div className="field">
-              <label>Max Files Per Submission</label>
+              <label>{tr('settings.maxFiles')}</label>
               <input
                 type="number"
                 min={1}
@@ -198,7 +199,7 @@ export function AdminSettingsClient({
             </div>
 
             <div className="field full">
-              <label>Allowed File Extensions (comma-separated)</label>
+              <label>{tr('settings.extensions')}</label>
               <input value={extText} onChange={(e) => setExtText(e.target.value)} />
             </div>
           </div>

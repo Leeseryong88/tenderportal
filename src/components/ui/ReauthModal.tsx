@@ -18,7 +18,7 @@ export function ReauthModal({
   onCancel: () => void;
   onSuccess: (freshIdToken: string) => void;
 }) {
-  const { tr } = useLanguage();
+  const { tr, trError } = useLanguage();
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -31,14 +31,14 @@ export function ReauthModal({
       const auth = getFirebaseClientAuth();
       const user = auth.currentUser;
       if (!user || !user.email) {
-        throw new Error('Signed-in Firebase session not found. Please sign in again.');
+        throw new Error(tr('error.UNAUTHENTICATED'));
       }
       const cred = EmailAuthProvider.credential(user.email, password);
       await reauthenticateWithCredential(user, cred);
       const token = await user.getIdToken(true);
       onSuccess(token);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Re-authentication failed.');
+      setError(trError(err));
     } finally {
       setLoading(false);
     }
@@ -50,12 +50,12 @@ export function ReauthModal({
     try {
       const auth = getFirebaseClientAuth();
       const user = auth.currentUser;
-      if (!user) throw new Error('Signed-in session not found.');
+      if (!user) throw new Error(tr('error.UNAUTHENTICATED'));
       await reauthenticateWithPopup(user, new GoogleAuthProvider());
       const token = await user.getIdToken(true);
       onSuccess(token);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Google re-authentication failed.');
+      setError(trError(err));
     } finally {
       setLoading(false);
     }

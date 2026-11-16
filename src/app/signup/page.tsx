@@ -17,7 +17,7 @@ function SignupPageInner() {
   const router = useRouter();
   const params = useSearchParams();
   const isGoogleProfileCompletion = params.get('completeProfile') === '1';
-  const { tr, lang } = useLanguage();
+  const { tr, trError } = useLanguage();
 
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -38,12 +38,18 @@ function SignupPageInner() {
       let user = auth.currentUser;
 
       if (!isGoogleProfileCompletion) {
-        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        user = cred.user;
-        await updateProfile(user, { displayName: displayName.trim() });
-        await sendEmailVerification(user).catch(() => {});
+        // A previous attempt may have created the Auth user before the access request failed;
+        // reuse it so a retry does not hit "email already in use".
+        const alreadyCreated =
+          user && user.email && user.email.toLowerCase() === email.trim().toLowerCase();
+        if (!alreadyCreated || !user) {
+          const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+          user = cred.user;
+          await updateProfile(user, { displayName: displayName.trim() });
+          await sendEmailVerification(user).catch(() => {});
+        }
       } else if (!user) {
-        throw new Error('Signed-in account not found.');
+        throw new Error(tr('error.UNAUTHENTICATED'));
       }
 
       const idToken = await user.getIdToken(true);
@@ -71,7 +77,7 @@ function SignupPageInner() {
         router.replace('/account/pending');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed.');
+      setError(trError(err));
     } finally {
       setLoading(false);
     }
@@ -83,7 +89,7 @@ function SignupPageInner() {
         <div className="auth-top">
           <div>
             <b style={{ letterSpacing: '0.14em', fontSize: 15 }}>IICOMBINED</b>
-            <span style={{ display: 'block', fontSize: 10, color: '#888', letterSpacing: '0.14em', marginTop: 4 }}>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)', letterSpacing: '0.14em', marginTop: 4 }}>
               TENDER PORTAL
             </span>
           </div>
@@ -113,6 +119,7 @@ function SignupPageInner() {
                 <input
                   type="email"
                   required
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   data-testid="signup-email"
@@ -124,10 +131,12 @@ function SignupPageInner() {
                   type="password"
                   required
                   minLength={8}
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   data-testid="signup-password"
                 />
+                <small className="subtle">{tr('auth.passwordHint')}</small>
               </div>
             </>
           )}
@@ -153,11 +162,7 @@ function SignupPageInner() {
               <option value="SUPPLIER">{tr('role.SUPPLIER')}</option>
               <option value="USER_DEPARTMENT">{tr('role.USER_DEPARTMENT')}</option>
             </select>
-            <small className="subtle">
-              {lang === 'ko'
-                ? '관리자 승인을 통해서만 실제 권한과 업체 연결이 부여됩니다.'
-                : 'Actual role and company linkage are assigned only after administrator approval.'}
-            </small>
+            <small className="subtle">{tr('auth.roleHint')}</small>
           </div>
 
           <div className="field">

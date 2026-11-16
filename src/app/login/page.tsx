@@ -20,7 +20,8 @@ function safeNextPath(raw: string | null): string | null {
 function LoginPageInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const { tr } = useLanguage();
+  const { tr, trError } = useLanguage();
+  const sessionExpired = params.get('expired') === '1';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -82,7 +83,7 @@ function LoginPageInner() {
       const idToken = await cred.user.getIdToken(true);
       await completeSessionAndRoute(idToken);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed.');
+      setError(trError(err));
     } finally {
       setLoading(false);
     }
@@ -97,7 +98,7 @@ function LoginPageInner() {
       const idToken = await cred.user.getIdToken(true);
       await completeSessionAndRoute(idToken);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Google sign-in failed.');
+      setError(trError(err));
     } finally {
       setLoading(false);
     }
@@ -109,7 +110,7 @@ function LoginPageInner() {
         <div className="auth-top">
           <div>
             <b style={{ letterSpacing: '0.14em', fontSize: 15 }}>IICOMBINED</b>
-            <span style={{ display: 'block', fontSize: 10, color: '#888', letterSpacing: '0.14em', marginTop: 4 }}>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)', letterSpacing: '0.14em', marginTop: 4 }}>
               TENDER PORTAL
             </span>
           </div>
@@ -121,22 +122,31 @@ function LoginPageInner() {
           {tr('auth.loginSub')}
         </p>
 
+        {sessionExpired && !error && (
+          <div className="notice warn" style={{ margin: '0 0 14px' }}>{tr('error.UNAUTHENTICATED')}</div>
+        )}
+
         <form onSubmit={handleLogin} style={{ display: 'grid', gap: 13 }}>
           <div className="field">
-            <label>{tr('auth.email')}</label>
+            <label htmlFor="login-email">{tr('auth.email')}</label>
             <input
+              id="login-email"
               type="email"
               required
+              autoComplete="username"
+              autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               data-testid="login-email"
             />
           </div>
           <div className="field">
-            <label>{tr('auth.password')}</label>
+            <label htmlFor="login-password">{tr('auth.password')}</label>
             <input
+              id="login-password"
               type="password"
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               data-testid="login-password"
@@ -169,6 +179,8 @@ function LoginPageInner() {
         <div
           style={{
             display: 'flex',
+            flexWrap: 'wrap',
+            gap: 10,
             justifyContent: 'space-between',
             marginTop: 18,
             paddingTop: 14,

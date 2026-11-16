@@ -11,6 +11,17 @@ export class ApiClientError extends Error {
   }
 }
 
+const SESSION_EXPIRED_CODES = new Set(['UNAUTHENTICATED', 'SESSION_INVALID', 'AUTHZ_VERSION_STALE']);
+const PROTECTED_PREFIXES = ['/admin', '/department', '/supplier'];
+
+function redirectToLogin() {
+  if (typeof window === 'undefined') return;
+  const { pathname, search } = window.location;
+  if (!PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return;
+  const next = encodeURIComponent(`${pathname}${search}`);
+  window.location.assign(`/login?next=${next}&expired=1`);
+}
+
 export async function apiFetch<T>(
   url: string,
   options: RequestInit & { reauthToken?: string } = {}
@@ -34,6 +45,9 @@ export async function apiFetch<T>(
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = payload?.error || {};
+    if (res.status === 401 && SESSION_EXPIRED_CODES.has(err.code)) {
+      redirectToLogin();
+    }
     throw new ApiClientError(
       res.status,
       err.code || 'API_ERROR',

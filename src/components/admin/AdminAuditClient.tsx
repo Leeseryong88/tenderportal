@@ -19,17 +19,27 @@ export function AdminAuditClient({
   organizationName: string;
   displayTimeZone: string;
 }) {
-  const { lang, tr } = useLanguage();
+  const { lang, tr, trError } = useLanguage();
   const { showToast } = useToast();
   const [logs, setLogs] = useState<AuditLogRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     void apiFetch<{ logs: AuditLogRecord[] }>('/api/admin/audit')
       .then((res) => setLogs(res.logs))
-      .catch((err) => showToast(err instanceof Error ? err.message : 'Failed to load audit logs', 'error'))
+      .catch((err) => showToast(trError(err), 'error'))
       .finally(() => setLoading(false));
-  }, [showToast]);
+  }, [showToast, trError]);
+
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? logs.filter((log) =>
+        [log.action, log.actorUid, log.actorRole, log.targetType, log.targetId, log.reason]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q))
+      )
+    : logs;
 
   return (
     <PortalShell
@@ -42,42 +52,55 @@ export function AdminAuditClient({
       <div className="heading">
         <div>
           <h1>{tr('nav.audit')}</h1>
-          <p>Immutable server-recorded security and procurement audit trail.</p>
+          <p>{tr('audit.sub')}</p>
         </div>
+      </div>
+
+      <div className="toolbar">
+        <input
+          className="search grow"
+          type="search"
+          placeholder={tr('common.search')}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
       </div>
 
       <div className="card table-card">
         <div className="table-wrap">
           {loading ? (
             <div className="empty">{tr('common.loading')}</div>
-          ) : logs.length === 0 ? (
+          ) : visible.length === 0 ? (
             <div className="empty">{tr('common.noResults')}</div>
           ) : (
             <table>
               <thead>
                 <tr>
-                  <th>TIME</th>
-                  <th>ACTOR</th>
-                  <th>ACTION</th>
-                  <th>TARGET</th>
-                  <th>REASON</th>
+                  <th>{tr('audit.colTime')}</th>
+                  <th>{tr('audit.colActor')}</th>
+                  <th>{tr('audit.colAction')}</th>
+                  <th>{tr('audit.colTarget')}</th>
+                  <th>{tr('common.reason')}</th>
                 </tr>
               </thead>
               <tbody>
-                {logs.map((log) => (
+                {visible.map((log) => (
                   <tr key={log.id}>
                     <td>{formatDateTimeInZone(log.createdAt, displayTimeZone, lang)}</td>
-                    <td>
-                      {log.actorUid}
+                    <td className="cell-wrap">
+                      <span className="primary-text" style={{ fontWeight: 500 }}>
+                        {log.actorUid}
+                      </span>
                       <span className="secondary">{log.actorRole}</span>
                     </td>
                     <td>
                       <b>{log.action}</b>
                     </td>
-                    <td>
-                      {log.targetType}:{log.targetId}
+                    <td className="cell-wrap">
+                      {log.targetType}
+                      <span className="secondary">{log.targetId}</span>
                     </td>
-                    <td>{log.reason || '—'}</td>
+                    <td className="cell-wrap">{log.reason || '—'}</td>
                   </tr>
                 ))}
               </tbody>

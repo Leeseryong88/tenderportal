@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/client/api';
 import { PortalShell } from '@/components/layout/PortalShell';
 import { useLanguage } from '@/components/providers/LanguageProvider';
 import { useToast } from '@/components/providers/ToastProvider';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Modal } from '@/components/ui/Modal';
 import { ReauthModal } from '@/components/ui/ReauthModal';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -29,6 +30,8 @@ interface UserRow {
   updatedAt: string;
 }
 
+type StatusChange = 'REJECTED' | 'DISABLED';
+
 export function AdminUsersClient({
   displayName,
   email,
@@ -38,7 +41,7 @@ export function AdminUsersClient({
   email: string;
   organizationName: string;
 }) {
-  const { lang, tr } = useLanguage();
+  const { lang, tr, trError } = useLanguage();
   const { showToast } = useToast();
 
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -52,10 +55,11 @@ export function AdminUsersClient({
   const [targetCompanyId, setTargetCompanyId] = useState('');
   const [targetCanManageAdmins, setTargetCanManageAdmins] = useState(false);
   const [reason, setReason] = useState('');
+  const [confirmStatus, setConfirmStatus] = useState<StatusChange | null>(null);
   const [pendingAction, setPendingAction] = useState<
     | null
     | { type: 'APPROVE'; uid: string }
-    | { type: 'STATUS'; uid: string; nextStatus: 'REJECTED' | 'DISABLED' }
+    | { type: 'STATUS'; uid: string; nextStatus: StatusChange }
   >(null);
 
   const loadAll = useCallback(async () => {
@@ -68,11 +72,11 @@ export function AdminUsersClient({
       setActorCanManageAdmins(uRes.actorCanManageAdmins);
       setSuppliers(sRes.suppliers);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load users', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, trError]);
 
   useEffect(() => {
     void loadAll();
@@ -81,7 +85,8 @@ export function AdminUsersClient({
   const openManageModal = (u: UserRow) => {
     setSelectedUser(u);
     setTargetRole(u.role || u.requestedRole || 'USER_DEPARTMENT');
-    setTargetCompanyId(u.supplierCompanyId || suppliers[0]?.id || '');
+    // Never preselect a company: linking the wrong supplier would expose its tenders.
+    setTargetCompanyId(u.supplierCompanyId || '');
     setTargetCanManageAdmins(u.canManageAdmins);
     setReason('');
   };
@@ -117,12 +122,24 @@ export function AdminUsersClient({
       await loadAll();
     } catch (err) {
       setPendingAction(null);
-      showToast(err instanceof Error ? err.message : 'Operation failed', 'error');
+      showToast(trError(err), 'error');
     }
   };
 
   const filtered = users.filter((u) => statusFilter === 'ALL' || u.status === statusFilter);
   const supplierMap = new Map(suppliers.map((s) => [s.id, s]));
+  const countFor = (st: AccountStatus | 'ALL') =>
+    st === 'ALL' ? users.length : users.filter((u) => u.status === st).length;
+
+  const sortedSuppliers = [...suppliers].sort((a, b) => a.name.localeCompare(b.name));
+
+  const approveBlockedReason = !selectedUser
+    ? ''
+    : !selectedUser.emailVerified
+      ? tr('users.emailNotVerifiedNotice')
+      : targetRole === 'SUPPLIER' && !targetCompanyId
+        ? tr('users.companyRequired')
+        : '';
 
   return (
     <PortalShell
@@ -135,19 +152,11 @@ export function AdminUsersClient({
       <div className="heading">
         <div>
           <h1>{tr('nav.users')}</h1>
-          <p>
-            {lang === 'ko'
-              ? '회원가입 승인 대기, 역할 배정, 협력사 Pool 업체 연결 및 계정 사용 중지를 관리합니다.'
-              : 'Review access requests, assign roles, link supplier companies, and manage account suspensions.'}
-          </p>
+          <p>{tr('users.sub')}</p>
         </div>
       </div>
 
-      <div className="notice">
-        {lang === 'ko'
-          ? '협력사 회사 소속 승인만으로는 입찰이 열리지 않습니다. 입찰 상세 화면에서 입찰별 접근 계정을 지정해야 해당 입찰 열람 및 자사 제출자료 공유가 가능합니다.'
-          : 'Approving a supplier user into a company does not automatically grant access to all tenders of that company. Assign specific users per tender in Tender Detail.'}
-      </div>
+      <div className="notice">{tr('users.scopeNotice')}</div>
 
       <div className="tender-tabs">
         {(['ALL', 'PENDING', 'ACTIVE', 'REJECTED', 'DISABLED'] as const).map((st) => (
@@ -157,7 +166,7 @@ export function AdminUsersClient({
             className={statusFilter === st ? 'active' : ''}
             onClick={() => setStatusFilter(st)}
           >
-            {st === 'ALL' ? tr('common.all') : tr(`status.${st}`)}
+            {st === 'ALL' ? tr('common.all') : tr(`status.${st}`)} ({countFor(st)})
           </button>
         ))}
       </div>
@@ -172,34 +181,39 @@ export function AdminUsersClient({
             <table>
               <thead>
                 <tr>
-                  <th>USER</th>
-                  <th>EMAIL VERIFIED</th>
-                  <th>REQUESTED</th>
-                  <th>ASSIGNED ROLE</th>
-                  <th>LINKED COMPANY</th>
-                  <th>STATUS</th>
-                  <th>ACTIONS</th>
+                  <th>{tr('users.colUser')}</th>
+                  <th>{tr('users.colEmail')}</th>
+                  <th>{tr('users.colRequested')}</th>
+                  <th>{tr('users.colRole')}</th>
+                  <th>{tr('users.colCompany')}</th>
+                  <th>{tr('common.status')}</th>
+                  <th>{tr('common.actions')}</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((u) => (
                   <tr key={u.uid}>
                     <td>
-                      <span className="primary-text">{u.displayName}</span>
+                      <span className="primary-text">{u.displayName || '—'}</span>
                       <span className="secondary">
                         {u.email} · {u.phone || '—'}
                       </span>
                     </td>
-                    <td>{u.emailVerified ? 'Verified' : 'Unverified'}</td>
+                    <td>
+                      <StatusPill
+                        status={u.emailVerified ? 'ACTIVE' : 'PENDING'}
+                        labelOverride={u.emailVerified ? tr('users.verified') : tr('users.unverified')}
+                      />
+                    </td>
                     <td>
                       {u.requestedRole ? tr(`role.${u.requestedRole}`) : '—'}
                       <span className="secondary">{u.requestedCompanyOrDept || '—'}</span>
                     </td>
                     <td>
                       {u.role ? tr(`role.${u.role}`) : '—'}
-                      {u.canManageAdmins && <span className="secondary">Owner Admin</span>}
+                      {u.canManageAdmins && <span className="secondary">{tr('users.ownerAdmin')}</span>}
                     </td>
-                    <td>
+                    <td className="cell-wrap">
                       {u.supplierCompanyId
                         ? supplierMap.get(u.supplierCompanyId)?.name || u.supplierCompanyId
                         : '—'}
@@ -210,11 +224,11 @@ export function AdminUsersClient({
                     <td>
                       <button
                         type="button"
-                        className="btn small"
+                        className={u.status === 'PENDING' ? 'btn small primary' : 'btn small'}
                         onClick={() => openManageModal(u)}
                         data-testid={`manage-user-${u.uid}`}
                       >
-                        Manage
+                        {u.status === 'PENDING' ? tr('common.review') : tr('users.manage')}
                       </button>
                     </td>
                   </tr>
@@ -225,38 +239,40 @@ export function AdminUsersClient({
         </div>
       </div>
 
-      {selectedUser && (
+      {selectedUser && !confirmStatus && !pendingAction && (
         <Modal
-          title={selectedUser.displayName}
+          title={selectedUser.displayName || selectedUser.email}
           subtitle={selectedUser.email}
           onClose={() => setSelectedUser(null)}
           maxWidth={580}
         >
           <div className="detail-box">
             <div className="detail-row">
-              <span>Verified Email</span>
-              <b>{selectedUser.emailVerified ? 'Yes' : 'No'}</b>
+              <span>{tr('users.colEmail')}</span>
+              <b>{selectedUser.emailVerified ? tr('users.verified') : tr('users.unverified')}</b>
             </div>
             <div className="detail-row">
-              <span>Requested Role</span>
-              <b>{selectedUser.requestedRole || '—'}</b>
+              <span>{tr('users.requestedRole')}</span>
+              <b>{selectedUser.requestedRole ? tr(`role.${selectedUser.requestedRole}`) : '—'}</b>
             </div>
             <div className="detail-row">
-              <span>Requested Dept / Company</span>
+              <span>{tr('users.requestedOrg')}</span>
               <b>{selectedUser.requestedCompanyOrDept || '—'}</b>
             </div>
             <div className="detail-row">
-              <span>Current Role / Status</span>
+              <span>{tr('users.currentState')}</span>
               <b>
-                {selectedUser.role || 'None'} / {selectedUser.status} (v{selectedUser.authzVersion})
+                {selectedUser.role ? tr(`role.${selectedUser.role}`) : tr('users.none')} /{' '}
+                {tr(`status.${selectedUser.status}`)}
               </b>
             </div>
           </div>
 
           <div className="form-grid">
             <div className="field">
-              <label>Assign Role *</label>
+              <label htmlFor="user-target-role">{tr('users.assignRole')} *</label>
               <select
+                id="user-target-role"
                 value={targetRole}
                 onChange={(e) => setTargetRole(e.target.value as Role)}
               >
@@ -268,13 +284,15 @@ export function AdminUsersClient({
 
             {targetRole === 'SUPPLIER' && (
               <div className="field">
-                <label>Link Supplier Company *</label>
+                <label htmlFor="user-target-company">{tr('users.linkCompany')} *</label>
                 <select
+                  id="user-target-company"
                   value={targetCompanyId}
                   onChange={(e) => setTargetCompanyId(e.target.value)}
+                  data-testid="user-target-company"
                 >
-                  <option value="">Select company...</option>
-                  {suppliers.map((s) => (
+                  <option value="">{tr('users.selectCompany')}</option>
+                  {sortedSuppliers.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name} ({s.countryCode})
                     </option>
@@ -288,62 +306,74 @@ export function AdminUsersClient({
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <input
                     type="checkbox"
-                    style={{ width: 'auto' }}
                     checked={targetCanManageAdmins}
                     onChange={(e) => setTargetCanManageAdmins(e.target.checked)}
                   />
-                  Grant canManageAdmins (Owner Admin)
+                  {tr('users.grantOwner')}
                 </label>
               </div>
             )}
 
             <div className="field full">
-              <label>Decision / Audit Reason</label>
+              <label htmlFor="user-reason">{tr('common.reason')}</label>
               <input
+                id="user-reason"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Reason for approval, role change, or suspension..."
+                placeholder={tr('users.reasonPlaceholder')}
               />
             </div>
           </div>
 
+          {approveBlockedReason && <div className="notice warn">{approveBlockedReason}</div>}
+
           <div className="modal-actions">
-            <button
-              type="button"
-              className="btn danger"
-              onClick={() =>
-                setPendingAction({
-                  type: 'STATUS',
-                  uid: selectedUser.uid,
-                  nextStatus: 'DISABLED',
-                })
-              }
-            >
-              Disable
-            </button>
-            <button
-              type="button"
-              className="btn danger"
-              onClick={() =>
-                setPendingAction({
-                  type: 'STATUS',
-                  uid: selectedUser.uid,
-                  nextStatus: 'REJECTED',
-                })
-              }
-            >
-              Reject
-            </button>
+            {selectedUser.status === 'ACTIVE' && (
+              <button type="button" className="btn danger" onClick={() => setConfirmStatus('DISABLED')}>
+                {tr('users.disable')}
+              </button>
+            )}
+            {selectedUser.status === 'PENDING' && (
+              <button type="button" className="btn danger" onClick={() => setConfirmStatus('REJECTED')}>
+                {tr('users.reject')}
+              </button>
+            )}
             <button
               type="button"
               className="btn primary"
+              disabled={Boolean(approveBlockedReason)}
               onClick={() => setPendingAction({ type: 'APPROVE', uid: selectedUser.uid })}
               data-testid="approve-user-btn"
             >
-              Approve / Save Role
+              {tr('users.approve')}
             </button>
           </div>
         </Modal>
+      )}
+
+      {selectedUser && confirmStatus && (
+        <ConfirmDialog
+          title={confirmStatus === 'DISABLED' ? tr('users.confirmDisableTitle') : tr('users.confirmRejectTitle')}
+          body={tr('users.confirmStatusBody')}
+          confirmLabel={confirmStatus === 'DISABLED' ? tr('users.disable') : tr('users.reject')}
+          danger
+          onCancel={() => setConfirmStatus(null)}
+          onConfirm={() => {
+            setPendingAction({ type: 'STATUS', uid: selectedUser.uid, nextStatus: confirmStatus });
+            setConfirmStatus(null);
+          }}
+        >
+          <div className="detail-box">
+            <div className="detail-row">
+              <span>{tr('users.colUser')}</span>
+              <b>{selectedUser.displayName || selectedUser.email}</b>
+            </div>
+            <div className="detail-row">
+              <span>{tr('common.reason')}</span>
+              <b>{reason.trim() || '—'}</b>
+            </div>
+          </div>
+        </ConfirmDialog>
       )}
 
       {pendingAction && (

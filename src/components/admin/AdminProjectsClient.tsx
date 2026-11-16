@@ -33,7 +33,7 @@ export function AdminProjectsClient({
   email: string;
   organizationName: string;
 }) {
-  const { lang, tr } = useLanguage();
+  const { lang, tr, trv, trError } = useLanguage();
   const { showToast } = useToast();
 
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
@@ -59,11 +59,11 @@ export function AdminProjectsClient({
       const res = await apiFetch<{ projects: ProjectRecord[] }>('/api/admin/projects');
       setProjects(res.projects);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load projects', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, trError]);
 
   useEffect(() => {
     void loadProjects();
@@ -113,7 +113,7 @@ export function AdminProjectsClient({
             masterSchedule: schedule,
           }),
         });
-        showToast('Project updated.');
+        showToast(tr('projects.updated'));
       } else {
         await apiFetch('/api/admin/projects', {
           method: 'POST',
@@ -128,12 +128,12 @@ export function AdminProjectsClient({
             masterSchedule: schedule,
           }),
         });
-        showToast('Project created.');
+        showToast(tr('projects.created'));
       }
       setShowModal(false);
       await loadProjects();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to save project', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setSaving(false);
     }
@@ -249,14 +249,14 @@ export function AdminProjectsClient({
                         {p.code} · {p.dateLocal}
                       </span>
                     </td>
-                    <td>
-                      {p.city}, {countryDisplayName(p.countryCode, p.countryName, lang)}
+                    <td className="cell-wrap">
+                      {[p.city, countryDisplayName(p.countryCode, p.countryName, lang)].filter(Boolean).join(', ')}
                     </td>
-                    <td>{p.type}</td>
+                    <td>{trv('projectType', p.type)}</td>
                     <td>
                       <span className="subtle">{p.timeZone}</span>
                     </td>
-                    <td>{p.owner}</td>
+                    <td className="cell-wrap">{p.owner}</td>
                     <td>
                       <StatusPill status={p.status} />
                     </td>
@@ -333,7 +333,7 @@ export function AdminProjectsClient({
                 <select value={type} onChange={(e) => setType(e.target.value)}>
                   {typeOptions.map((tOpt) => (
                     <option key={tOpt} value={tOpt}>
-                      {tOpt}
+                      {trv('projectType', tOpt)}
                     </option>
                   ))}
                 </select>
@@ -350,9 +350,9 @@ export function AdminProjectsClient({
                   value={status}
                   onChange={(e) => setStatus(e.target.value as ProjectStatus)}
                 >
-                  <option value="Planning">Planning</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
+                  <option value="Planning">{trv('projectStatus', 'Planning')}</option>
+                  <option value="In Progress">{trv('projectStatus', 'In Progress')}</option>
+                  <option value="Completed">{trv('projectStatus', 'Completed')}</option>
                 </select>
               </div>
 

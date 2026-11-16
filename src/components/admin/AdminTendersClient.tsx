@@ -23,6 +23,8 @@ import { marketDisplayName } from '@/lib/domain/coverage';
 import { PortalShell } from '@/components/layout/PortalShell';
 import { useLanguage } from '@/components/providers/LanguageProvider';
 import { useToast } from '@/components/providers/ToastProvider';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { DownloadButton } from '@/components/ui/DownloadButton';
 import { Modal } from '@/components/ui/Modal';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { ScheduleEditor } from '@/components/domain/ScheduleEditor';
@@ -88,7 +90,7 @@ export function AdminTendersClient({
   email: string;
   organizationName: string;
 }) {
-  const { lang, tr } = useLanguage();
+  const { lang, tr, trv, trError } = useLanguage();
   const { showToast } = useToast();
 
   const [tab, setTab] = useState<'list' | 'submissions'>('list');
@@ -119,6 +121,8 @@ export function AdminTendersClient({
   const [fDesc, setFDesc] = useState('');
   const [fChangeReason, setFChangeReason] = useState('');
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
 
   // Detail modal state
   const [detailData, setDetailData] = useState<TenderDetailPayload | null>(null);
@@ -143,11 +147,11 @@ export function AdminTendersClient({
       setProjects(pRes.projects);
       setSuppliers(sRes.suppliers);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load tenders', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, trError]);
 
   useEffect(() => {
     void loadAll();
@@ -164,12 +168,7 @@ export function AdminTendersClient({
 
   const openCreateModal = () => {
     if (!projects.length || !suppliers.length) {
-      showToast(
-        lang === 'ko'
-          ? '먼저 프로젝트와 협력사를 등록하세요.'
-          : 'Add at least one project and supplier first.',
-        'error'
-      );
+      showToast(tr('tenders.needProjectSupplier'), 'error');
       return;
     }
     const firstProj = projects[0];
@@ -188,6 +187,7 @@ export function AdminTendersClient({
     setFRequired('Technical Proposal, Commercial Proposal');
     setFDesc('');
     setFChangeReason('');
+    setFormError('');
     setShowEditor(true);
   };
 
@@ -207,6 +207,7 @@ export function AdminTendersClient({
     setFRequired(t.requiredDocuments);
     setFDesc(t.description);
     setFChangeReason('');
+    setFormError('');
     setShowEditor(true);
   };
 
@@ -231,7 +232,25 @@ export function AdminTendersClient({
     }
   };
 
+  const validateTenderForm = (action: 'SAVE_DRAFT' | 'PUBLISH' | 'SAVE_PUBLISHED'): string => {
+    if (!fName.trim()) return tr('tenders.needName');
+    if (action === 'SAVE_DRAFT') return '';
+    if (fBidders.length === 0) return tr('tenders.needBidders');
+    if (!fDeadlineLocal) return tr('tenders.needDeadline');
+    if (dstResolution && !dstResolution.ok) {
+      if (dstResolution.errorCode === 'NON_EXISTENT_LOCAL_TIME') return tr('tenders.dstGap');
+      if (dstResolution.ambiguous) return tr('tenders.dstAmbiguous');
+    }
+    if (dstResolution?.ok && dstResolution.utcIso && Date.parse(dstResolution.utcIso) <= Date.now()) {
+      return tr('tenders.needFutureDeadline');
+    }
+    return '';
+  };
+
   const submitTenderForm = async (action: 'SAVE_DRAFT' | 'PUBLISH' | 'SAVE_PUBLISHED') => {
+    const problem = validateTenderForm(action);
+    setFormError(problem);
+    if (problem) return;
     setSaving(true);
     try {
       const payload = {
@@ -255,32 +274,20 @@ export function AdminTendersClient({
           method: 'PATCH',
           body: JSON.stringify(payload),
         });
-        showToast(
-          action === 'SAVE_DRAFT'
-            ? 'Draft updated.'
-            : lang === 'ko'
-              ? '입찰 수정사항을 저장했습니다.'
-              : 'Tender changes saved.'
-        );
+        showToast(action === 'SAVE_DRAFT' ? tr('tenders.savedDraft') : tr('tenders.savedChanges'));
       } else {
         await apiFetch('/api/admin/tenders', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        showToast(
-          action === 'SAVE_DRAFT'
-            ? lang === 'ko'
-              ? '입찰을 임시 저장했습니다.'
-              : 'Tender saved as draft.'
-            : lang === 'ko'
-              ? '입찰을 생성했습니다.'
-              : 'Tender published.'
-        );
+        showToast(action === 'SAVE_DRAFT' ? tr('tenders.savedDraft') : tr('tenders.savedPublished'));
       }
       setShowEditor(false);
       await loadAll();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to save tender', 'error');
+      const message = trError(err);
+      setFormError(message);
+      showToast(message, 'error');
     } finally {
       setSaving(false);
     }
@@ -296,7 +303,7 @@ export function AdminTendersClient({
       setDetailData(detail);
       setDetailInvites(invRes.invitations);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to open tender detail', 'error');
+      showToast(trError(err), 'error');
     }
   };
 
@@ -309,18 +316,18 @@ export function AdminTendersClient({
         versions: detail.submissionsByCompany[companyId] || [],
       });
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load submission', 'error');
+      showToast(trError(err), 'error');
     }
   };
 
-  const handleRfpUpload = async (files: FileList | null) => {
-    if (!files || !files.length || !detailData) return;
+  const handleRfpUpload = async (files: File[]) => {
+    if (!files.length || !detailData) return;
     const tenderId = detailData.tender.id;
     const storage = getFirebaseClientStorage();
     const intentIds: string[] = [];
 
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         const intent = await apiFetch<{
           intentId: string;
           fileId: string;
@@ -355,12 +362,12 @@ export function AdminTendersClient({
       });
 
       setRfpProgress(null);
-      showToast(lang === 'ko' ? 'RFP 자료를 업로드했습니다.' : 'RFP documents uploaded.');
+      showToast(tr('tenders.rfpUploaded'));
       await openDetailModal(tenderId);
       await loadAll();
     } catch (err) {
       setRfpProgress(null);
-      showToast(err instanceof Error ? err.message : 'RFP upload failed', 'error');
+      showToast(trError(err), 'error');
     }
   };
 
@@ -373,7 +380,7 @@ export function AdminTendersClient({
       });
       await openDetailModal(detailData.tender.id);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to update visibility', 'error');
+      showToast(trError(err), 'error');
     }
   };
 
@@ -392,9 +399,9 @@ export function AdminTendersClient({
         body: JSON.stringify({ companyId, assignedUserIds: next }),
       });
       await openDetailModal(detailData.tender.id);
-      showToast(lang === 'ko' ? '입찰 접근 계정을 업데이트했습니다.' : 'Assigned accounts updated.');
+      showToast(tr('tenders.assignUpdated'));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to assign user', 'error');
+      showToast(trError(err), 'error');
     }
   };
 
@@ -402,7 +409,7 @@ export function AdminTendersClient({
     if (!detailData) return;
     const targetEmail = (inviteEmailByCompany[companyId] || '').trim();
     if (!targetEmail) {
-      showToast(lang === 'ko' ? '대상 이메일을 입력하세요.' : 'Enter target email.', 'error');
+      showToast(tr('tenders.needInviteEmail'), 'error');
       return;
     }
     try {
@@ -415,14 +422,11 @@ export function AdminTendersClient({
       );
       setGeneratedLink(res.inviteUrl);
       await navigator.clipboard?.writeText(res.inviteUrl).catch(() => {});
-      showToast(
-        lang === 'ko'
-          ? '초청 링크를 생성했습니다. 직접 대상자에게 전달하세요.'
-          : 'Invitation link generated. Please share it directly with the recipient.'
-      );
+      setInviteEmailByCompany((prev) => ({ ...prev, [companyId]: '' }));
+      showToast(tr('tenders.inviteCreated'));
       await openDetailModal(detailData.tender.id);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to create invite link', 'error');
+      showToast(trError(err), 'error');
     }
   };
 
@@ -433,10 +437,10 @@ export function AdminTendersClient({
         `/api/admin/tenders/${detailData.tender.id}/invitations/${tokenHash}`,
         { method: 'DELETE' }
       );
-      showToast(lang === 'ko' ? '초청 링크를 회수했습니다.' : 'Invitation revoked.');
+      showToast(tr('tenders.inviteRevokedToast'));
       await openDetailModal(detailData.tender.id);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to revoke invite', 'error');
+      showToast(trError(err), 'error');
     }
   };
 
@@ -548,13 +552,13 @@ export function AdminTendersClient({
                     {filteredTenders.map((t) => (
                       <tr key={t.id}>
                         <td>
-                          <span className="primary-text">{t.name || 'Untitled draft'}</span>
+                          <span className="primary-text">{t.name || tr('common.untitled')}</span>
                           <span className="secondary">
                             {t.code} · rev.{t.revision}
                           </span>
                         </td>
-                        <td>{t.projectName}</td>
-                        <td>{t.type}</td>
+                        <td className="cell-wrap">{t.projectName}</td>
+                        <td className="cell-wrap">{trv('category', t.type)}</td>
                         <td>{formatDateTimeInZone(t.deadlineAt, t.timeZone, lang)}</td>
                         <td>{t.invitedCompanyIds.length}</td>
                         <td>
@@ -564,7 +568,7 @@ export function AdminTendersClient({
                           <StatusPill status={t.computedStatus} />
                         </td>
                         <td>
-                          <div style={{ display: 'flex', gap: 6 }}>
+                          <div className="row-actions" style={{ justifyContent: 'flex-start' }}>
                             <button
                               type="button"
                               className="btn small"
@@ -598,9 +602,7 @@ export function AdminTendersClient({
       ) : (
         <>
           <div className="notice">
-            {lang === 'ko'
-              ? '접수된 견적 및 기술 자료는 구매팀 관리자만 열람할 수 있습니다. 자동 금액 추출 및 봉인평가는 현재 범위에 포함되지 않습니다.'
-              : 'Submitted commercial and technical files are visible to Procurement Admins only.'}
+            {tr('tenders.adminOnlyNotice')}
           </div>
           <div className="card table-card">
             <div className="table-wrap">
@@ -629,7 +631,7 @@ export function AdminTendersClient({
                               {t.code} · {t.projectName}
                             </span>
                           </td>
-                          <td>{sup?.name || companyId}</td>
+                          <td className="cell-wrap">{sup?.name || companyId}</td>
                           <td>
                             <StatusPill status={submitted ? 'SUBMITTED' : 'NOT_SUBMITTED'} />
                           </td>
@@ -646,7 +648,7 @@ export function AdminTendersClient({
                                 className="btn small"
                                 onClick={() => openSubmissionsModal(t, companyId)}
                               >
-                                {lang === 'ko' ? '견적/제출파일 보기' : 'View quote/files'}
+                                {tr('tenders.viewFiles')}
                               </button>
                             ) : (
                               '—'
@@ -745,7 +747,7 @@ export function AdminTendersClient({
                 <select value={fType} onChange={(e) => setFType(e.target.value)}>
                   {TENDER_TYPES.map((opt) => (
                     <option key={opt} value={opt}>
-                      {opt}
+                      {trv('category', opt)}
                     </option>
                   ))}
                 </select>
@@ -797,9 +799,7 @@ export function AdminTendersClient({
               {dstResolution && !dstResolution.ok && dstResolution.errorCode === 'NON_EXISTENT_LOCAL_TIME' && (
                 <div className="field full">
                   <div className="notice danger" style={{ margin: 0 }}>
-                    {lang === 'ko'
-                      ? '선택한 현지 시각은 서머타임 전환(Spring Forward)으로 존재하지 않는 시각입니다.'
-                      : 'The selected local time does not exist due to a Daylight Saving Time transition.'}
+                    {tr('tenders.dstGap')}
                   </div>
                 </div>
               )}
@@ -808,9 +808,7 @@ export function AdminTendersClient({
                 <div className="field full">
                   <div className="notice warn" style={{ margin: 0 }}>
                     <div>
-                      {lang === 'ko'
-                        ? '서머타임 종료로 동일한 현지 시각이 두 번 발생합니다. 적용할 오프셋을 선택하세요:'
-                        : 'This local time occurs twice due to DST fall-back. Choose which offset applies:'}
+                      {tr('tenders.dstAmbiguous')}
                     </div>
                     <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -883,8 +881,8 @@ export function AdminTendersClient({
                             </b>
                             {/* NDA first, then coverage; HQ location intentionally omitted here */}
                             <small>
-                              NDA: {s.ndaStatus}
-                              {lockedSubmitted ? ' · Submitted (locked)' : ''}
+                              NDA: {trv('nda', s.ndaStatus)}
+                              {lockedSubmitted ? ` · ${tr('tenders.submittedLocked')}` : ''}
                             </small>
                             <small>
                               {tr('suppliers.serviceCoverage')}: {coverageStr || '—'}
@@ -916,15 +914,17 @@ export function AdminTendersClient({
                   <input
                     value={fChangeReason}
                     onChange={(e) => setFChangeReason(e.target.value)}
-                    placeholder={
-                      lang === 'ko'
-                        ? '예: 마감일 연장 또는 RFP 수정 안내'
-                        : 'e.g. Extended deadline or revised RFP scope'
-                    }
+                    placeholder={tr('tenders.changeReasonPlaceholder')}
                   />
                 </div>
               )}
             </div>
+
+            {formError && (
+              <div className="notice danger" role="alert" data-testid="tender-form-error">
+                {formError}
+              </div>
+            )}
 
             <div className="modal-actions">
               <button
@@ -1002,7 +1002,7 @@ export function AdminTendersClient({
           </div>
 
           <div className="detail-box">
-            <b style={{ fontSize: 12 }}>{tr('tenders.schedule')}</b>
+            <b style={{ fontSize: 13 }}>{tr('tenders.schedule')}</b>
             <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
               {TENDER_MILESTONES.map((st) => {
                 const entry = detailData.tender.schedule[st.key];
@@ -1029,10 +1029,10 @@ export function AdminTendersClient({
           </div>
 
           <div className="detail-box">
-            <b style={{ fontSize: 12 }}>{tr('tenders.rfpDocs')}</b>
+            <b style={{ fontSize: 13 }}>{tr('tenders.rfpDocs')}</b>
             <div style={{ marginTop: 8 }}>
               {detailData.files.filter((f) => f.ownerScope === 'RFP').length === 0 ? (
-                <div className="subtle">No tender files uploaded yet.</div>
+                <div className="subtle">{tr('tenders.noRfp')}</div>
               ) : (
                 detailData.files
                   .filter((f) => f.ownerScope === 'RFP')
@@ -1040,30 +1040,23 @@ export function AdminTendersClient({
                     <div key={f.id} className="detail-row">
                       <span>
                         {f.originalName}{' '}
-                        <StatusPill status={f.scanStatus} />
+                        <StatusPill status={f.scanStatus} kind="scan" />{' '}
+                        <StatusPill
+                          status={f.publishedToSuppliers ? 'ACTIVE' : 'DRAFT'}
+                          labelOverride={
+                            f.publishedToSuppliers ? tr('tenders.published') : tr('tenders.internalOnly')
+                          }
+                        />
                       </span>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div className="row-actions">
                         <button
                           type="button"
                           className="btn small"
                           onClick={() => handleToggleRfpVisibility(f)}
                         >
-                          {f.publishedToSuppliers
-                            ? lang === 'ko'
-                              ? '협력사 공개 중'
-                              : 'Published'
-                            : lang === 'ko'
-                              ? '내부 전용'
-                              : 'Internal only'}
+                          {f.publishedToSuppliers ? tr('tenders.makeInternal') : tr('tenders.makePublished')}
                         </button>
-                        <a
-                          className="btn small"
-                          href={`/api/files/${f.id}/download`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          ↓ {tr('common.download')}
-                        </a>
+                        <DownloadButton fileId={f.id} fileName={f.originalName} scanStatus={f.scanStatus} />
                       </div>
                     </div>
                   ))
@@ -1073,26 +1066,40 @@ export function AdminTendersClient({
               <input
                 type="file"
                 multiple
-                onChange={(e) => void handleRfpUpload(e.target.files)}
+                disabled={rfpProgress !== null}
+                onChange={(e) => {
+                  const picked = e.target.files ? Array.from(e.target.files) : [];
+                  e.target.value = '';
+                  void handleRfpUpload(picked);
+                }}
               />
               <div style={{ marginTop: 6 }}>{tr('tenders.uploadRfp')}</div>
-              {rfpProgress !== null && <div>Uploading... {rfpProgress}%</div>}
+              {rfpProgress !== null && (
+                <div style={{ marginTop: 6, fontWeight: 600 }}>
+                  {tr('common.uploading')} {rfpProgress}%
+                </div>
+              )}
             </div>
           </div>
 
           <div className="detail-box">
-            <b style={{ fontSize: 12 }}>{tr('tenders.inviteLinks')}</b>
+            <b style={{ fontSize: 13 }}>{tr('tenders.inviteLinks')}</b>
             {generatedLink && (
               <div className="notice" style={{ marginTop: 8 }}>
                 <div>
-                  <b>{lang === 'ko' ? '생성된 초청 링크 (직접 전달용)' : 'Generated invite link'}</b>
+                  <b>{tr('tenders.generatedLink')}</b>
                 </div>
                 <div className="link-box" style={{ marginTop: 6 }}>
                   <input readOnly value={generatedLink} data-testid="generated-invite-link" />
                   <button
                     type="button"
                     className="btn small"
-                    onClick={() => void navigator.clipboard?.writeText(generatedLink)}
+                    onClick={() =>
+                      void navigator.clipboard
+                        ?.writeText(generatedLink)
+                        .then(() => showToast(tr('tenders.copied')))
+                        .catch(() => {})
+                    }
                   >
                     {tr('tenders.copyInviteLink')}
                   </button>
@@ -1123,30 +1130,27 @@ export function AdminTendersClient({
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
+                        gap: 8,
                         marginBottom: 6,
                       }}
                     >
-                      <b>{sup?.name || cid}</b>
+                      <b style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{sup?.name || cid}</b>
                       <StatusPill status={part?.hasSubmitted ? 'SUBMITTED' : 'NOT_SUBMITTED'} />
                     </div>
 
                     <div className="subtle" style={{ marginBottom: 6 }}>
-                      {lang === 'ko'
-                        ? '입찰 접근 배정된 승인 계정:'
-                        : 'Assigned approved supplier accounts:'}
+                      {tr('tenders.assignedAccounts')}
                     </div>
                     {companyUsers.length === 0 ? (
                       <div className="subtle">
-                        {lang === 'ko'
-                          ? '이 업체에 연결된 승인 계정이 없습니다.'
-                          : 'No approved user accounts linked to this company yet.'}
+                        {tr('tenders.noLinkedAccounts')}
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
                         {companyUsers.map((u) => (
                           <label
                             key={u.uid}
-                            style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, overflowWrap: 'anywhere' }}
                           >
                             <input
                               type="checkbox"
@@ -1162,12 +1166,9 @@ export function AdminTendersClient({
                     <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                       <input
                         className="search"
-                        style={{ minWidth: 0, flex: 1, padding: '6px 9px' }}
-                        placeholder={
-                          lang === 'ko'
-                            ? '초청 대상 이메일 입력...'
-                            : 'Target supplier email...'
-                        }
+                        type="email"
+                        style={{ minWidth: 0, flex: 1, padding: '7px 10px' }}
+                        placeholder={tr('tenders.inviteEmailPlaceholder')}
                         value={inviteEmailByCompany[cid] || ''}
                         onChange={(e) =>
                           setInviteEmailByCompany((prev) => ({
@@ -1181,7 +1182,7 @@ export function AdminTendersClient({
                         className="btn small"
                         onClick={() => void handleCreateInvite(cid)}
                       >
-                        {tr('tenders.copyInviteLink')}
+                        {tr('tenders.createInviteLink')}
                       </button>
                     </div>
                   </div>
@@ -1191,26 +1192,34 @@ export function AdminTendersClient({
 
             {detailInvites.length > 0 && (
               <div style={{ marginTop: 12 }}>
-                <b style={{ fontSize: 11 }}>
-                  {lang === 'ko' ? '발급된 초청 링크 이력' : 'Issued invitation links'}
-                </b>
+                <b style={{ fontSize: 13 }}>{tr('tenders.issuedLinks')}</b>
                 {detailInvites.map((inv) => (
                   <div key={inv.tokenHash} className="detail-row">
                     <span>
-                      {inv.normalizedEmail} ·{' '}
-                      {inv.revokedAt
-                        ? 'Revoked'
-                        : inv.consumedAt
-                          ? 'Claimed'
-                          : 'Active'}
+                      {inv.normalizedEmail}{' '}
+                      <StatusPill
+                        status={inv.revokedAt ? 'DISABLED' : inv.consumedAt ? 'CLOSED' : 'ACTIVE'}
+                        labelOverride={
+                          inv.revokedAt
+                            ? tr('tenders.inviteRevoked')
+                            : inv.consumedAt
+                              ? tr('tenders.inviteClaimed')
+                              : tr('tenders.inviteActive')
+                        }
+                      />
+                      {!inv.revokedAt && !inv.consumedAt && (
+                        <small className="secondary">
+                          {tr('tenders.expiresAt')}: {formatDateTimeInZone(inv.expiresAt, detailData.tender.timeZone, lang)}
+                        </small>
+                      )}
                     </span>
                     {!inv.revokedAt && !inv.consumedAt && (
                       <button
                         type="button"
                         className="btn small danger"
-                        onClick={() => void handleRevokeInvite(inv.tokenHash)}
+                        onClick={() => setRevokeTarget(inv.tokenHash)}
                       >
-                        Revoke
+                        {tr('tenders.revoke')}
                       </button>
                     )}
                   </div>
@@ -1241,7 +1250,7 @@ export function AdminTendersClient({
             submissionModal.versions.map((ver) => (
               <div key={ver.versionId} className="detail-box">
                 <div className="detail-row">
-                  <span>Version</span>
+                  <span>{tr('common.version')}</span>
                   <b>
                     v{ver.versionNumber} · {ver.receiptNumber}
                   </b>
@@ -1260,16 +1269,9 @@ export function AdminTendersClient({
                   {ver.files.map((f) => (
                     <div key={f.fileId} className="detail-row">
                       <span>
-                        {f.originalName} <StatusPill status={f.scanStatus} />
+                        {f.originalName} <StatusPill status={f.scanStatus} kind="scan" />
                       </span>
-                      <a
-                        className="btn small"
-                        href={`/api/files/${f.fileId}/download`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        ↓ {tr('common.download')}
-                      </a>
+                      <DownloadButton fileId={f.fileId} fileName={f.originalName} scanStatus={f.scanStatus} />
                     </div>
                   ))}
                 </div>
@@ -1286,6 +1288,20 @@ export function AdminTendersClient({
             </button>
           </div>
         </Modal>
+      )}
+      {revokeTarget && (
+        <ConfirmDialog
+          title={tr('tenders.confirmRevokeTitle')}
+          body={tr('tenders.confirmRevokeBody')}
+          confirmLabel={tr('tenders.revoke')}
+          danger
+          onCancel={() => setRevokeTarget(null)}
+          onConfirm={() => {
+            const target = revokeTarget;
+            setRevokeTarget(null);
+            void handleRevokeInvite(target);
+          }}
+        />
       )}
     </PortalShell>
   );

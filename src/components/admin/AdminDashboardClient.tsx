@@ -48,7 +48,7 @@ export function AdminDashboardClient({
   email: string;
   organizationName: string;
 }) {
-  const { lang, tr } = useLanguage();
+  const { lang, tr, trv, trError } = useLanguage();
   const { showToast } = useToast();
 
   const [data, setData] = useState<DashboardPayload | null>(null);
@@ -62,6 +62,7 @@ export function AdminDashboardClient({
   const [taskTitle, setTaskTitle] = useState('');
   const [taskPriority, setTaskPriority] = useState<'High' | 'Normal'>('Normal');
   const [taskProjectId, setTaskProjectId] = useState('');
+  const [creatingTask, setCreatingTask] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -69,11 +70,11 @@ export function AdminDashboardClient({
       setData(payload);
       setSelectedDate((prev) => prev || payload.serverToday);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load dashboard', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, trError]);
 
   useEffect(() => {
     void loadDashboard();
@@ -93,7 +94,9 @@ export function AdminDashboardClient({
         type: 'task',
         dateLocal: task.dateLocal,
         title: task.title,
-        subtitle: p ? `${p.name} · ${task.priority}` : task.priority,
+        subtitle: p
+          ? `${p.name} · ${trv('priority', task.priority)}`
+          : trv('priority', task.priority),
         priority: task.priority,
         done: task.done,
       });
@@ -166,7 +169,7 @@ export function AdminDashboardClient({
       (a, b) =>
         a.dateLocal.localeCompare(b.dateLocal) || (a.priority === 'High' ? -1 : 1)
     );
-  }, [data, tr]);
+  }, [data, tr, trv]);
 
   const handleToggleTask = async (task: DashboardTask) => {
     try {
@@ -176,27 +179,33 @@ export function AdminDashboardClient({
       });
       await loadDashboard();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to update task', 'error');
+      showToast(trError(err), 'error');
     }
   };
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (creatingTask || !taskTitle.trim()) return;
+    setCreatingTask(true);
     try {
       await apiFetch('/api/admin/tasks', {
         method: 'POST',
         body: JSON.stringify({
-          title: taskTitle,
+          title: taskTitle.trim(),
           projectId: taskProjectId || null,
           dateLocal: selectedDate || data?.serverToday,
           priority: taskPriority,
         }),
       });
       setTaskTitle('');
+      setTaskPriority('Normal');
+      setTaskProjectId('');
       setShowAddTask(false);
       await loadDashboard();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to add task', 'error');
+      showToast(trError(err), 'error');
+    } finally {
+      setCreatingTask(false);
     }
   };
 
@@ -354,7 +363,9 @@ export function AdminDashboardClient({
                             type="button"
                             className="agenda-check"
                             onClick={() => handleToggleTask(taskObj)}
-                            title="Toggle"
+                            title={tr('dashboard.toggleTask')}
+                            aria-label={tr('dashboard.toggleTask')}
+                            aria-pressed={ev.done}
                           >
                             {ev.done ? '✓' : ''}
                           </button>
@@ -415,7 +426,15 @@ export function AdminDashboardClient({
                     className={`calendar-day${d.sameMonth ? '' : ' outside'}${
                       d.iso === todayIso ? ' today' : ''
                     }${d.iso === activeDate ? ' selected' : ''}`}
-                    onClick={() => setSelectedDate(d.iso)}
+                    onClick={() => {
+                      setSelectedDate(d.iso);
+                      if (!d.sameMonth) {
+                        const [y, m] = d.iso.split('-').map(Number);
+                        setMonthCursor(new Date(y!, m! - 1, 1));
+                      }
+                    }}
+                    aria-label={d.iso}
+                    aria-pressed={d.iso === activeDate}
                   >
                     <span>{d.dayNum}</span>
                     {d.hasEvents && <i />}
@@ -658,7 +677,7 @@ export function AdminDashboardClient({
                         <span className="primary-text">{t.name || t.code}</span>
                         <span className="secondary">{t.code}</span>
                       </td>
-                      <td>{t.projectName}</td>
+                      <td className="cell-wrap">{t.projectName}</td>
                       <td>{formatDateTimeInZone(t.deadlineAt, t.timeZone, lang)}</td>
                       <td>
                         {t.receivedCompanyCount} / {t.invitedCompanyIds.length}
@@ -684,9 +703,12 @@ export function AdminDashboardClient({
         >
           <form onSubmit={handleCreateTask} style={{ display: 'grid', gap: 12 }}>
             <div className="field">
-              <label>Title *</label>
+              <label htmlFor="task-title">{tr('dashboard.taskTitle')} *</label>
               <input
+                id="task-title"
                 required
+                autoFocus
+                maxLength={200}
                 value={taskTitle}
                 onChange={(e) => setTaskTitle(e.target.value)}
               />
@@ -703,21 +725,21 @@ export function AdminDashboardClient({
               </select>
             </div>
             <div className="field">
-              <label>Priority</label>
+              <label>{tr('common.priority')}</label>
               <select
                 value={taskPriority}
                 onChange={(e) => setTaskPriority(e.target.value as 'High' | 'Normal')}
               >
-                <option value="Normal">Normal</option>
-                <option value="High">High</option>
+                <option value="Normal">{trv('priority', 'Normal')}</option>
+                <option value="High">{trv('priority', 'High')}</option>
               </select>
             </div>
             <div className="modal-actions">
               <button type="button" className="btn" onClick={() => setShowAddTask(false)}>
                 {tr('common.cancel')}
               </button>
-              <button type="submit" className="btn primary">
-                {tr('common.save')}
+              <button type="submit" className="btn primary" disabled={creatingTask || !taskTitle.trim()}>
+                {creatingTask ? tr('common.loading') : tr('common.save')}
               </button>
             </div>
           </form>

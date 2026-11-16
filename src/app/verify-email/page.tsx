@@ -10,7 +10,7 @@ import { useToast } from '@/components/providers/ToastProvider';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
-  const { tr } = useLanguage();
+  const { tr, trError } = useLanguage();
   const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -18,11 +18,11 @@ export default function VerifyEmailPage() {
     setBusy(true);
     try {
       const user = getFirebaseClientAuth().currentUser;
-      if (!user) throw new Error('Please sign in again.');
+      if (!user) throw new Error(tr('error.UNAUTHENTICATED'));
       await sendEmailVerification(user);
-      showToast('Verification email sent.');
+      showToast(tr('auth.verificationSent'));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to send verification email.', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setBusy(false);
     }
@@ -46,7 +46,7 @@ export default function VerifyEmailPage() {
         '/api/auth/me'
       );
       if (!me.emailVerified) {
-        showToast('Email is not verified yet.', 'error');
+        showToast(tr('auth.notVerifiedYet'), 'error');
         return;
       }
       if (me.status === 'ACTIVE' && me.role === 'ADMIN') router.replace('/admin/dashboard');
@@ -55,7 +55,7 @@ export default function VerifyEmailPage() {
       else if (me.status === 'ACTIVE' && me.role === 'SUPPLIER') router.replace('/supplier/tenders');
       else router.replace('/account/pending');
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Verification check failed.', 'error');
+      showToast(trError(err), 'error');
     } finally {
       setBusy(false);
     }

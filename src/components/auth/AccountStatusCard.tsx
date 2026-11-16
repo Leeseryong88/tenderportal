@@ -13,7 +13,9 @@ export function AccountStatusCard({
   expectedState: 'PENDING' | 'REJECTED' | 'DISABLED';
 }) {
   const router = useRouter();
-  const { tr } = useLanguage();
+  const { tr, trv } = useLanguage();
+  const [checking, setChecking] = useState(false);
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [info, setInfo] = useState<{
     email: string;
     status: string;
@@ -22,6 +24,7 @@ export function AccountStatusCard({
   } | null>(null);
 
   const checkStatus = useCallback(async () => {
+    setChecking(true);
     try {
       const me = await apiFetch<{
         email: string;
@@ -50,8 +53,11 @@ export function AccountStatusCard({
         return;
       }
       setInfo(me);
+      setCheckedAt(new Date());
     } catch {
       router.replace('/login');
+    } finally {
+      setChecking(false);
     }
   }, [router]);
 
@@ -87,7 +93,7 @@ export function AccountStatusCard({
           <LanguageSwitcher />
         </div>
         <h1 style={{ fontSize: 20, margin: '0 0 8px' }}>{title}</h1>
-        <p className="subtle" style={{ fontSize: 12, lineHeight: 1.6, marginBottom: 16 }}>
+        <p className="subtle" style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>
           {desc}
         </p>
         {info && (
@@ -98,23 +104,28 @@ export function AccountStatusCard({
             </div>
             <div className="detail-row">
               <span>{tr('common.status')}</span>
-              <b>{info.status}</b>
+              <b>{trv('status', info.status)}</b>
             </div>
             {info.decisionReason && (
               <div className="detail-row">
-                <span>Reason</span>
+                <span>{tr('common.reason')}</span>
                 <b>{info.decisionReason}</b>
               </div>
             )}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button type="button" className="btn primary" onClick={checkStatus}>
-            Refresh status
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button type="button" className="btn primary" onClick={checkStatus} disabled={checking}>
+            {checking ? tr('common.loading') : tr('auth.refreshStatus')}
           </button>
           <button type="button" className="btn" onClick={handleLogout}>
             {tr('app.logout')}
           </button>
+          {checkedAt && !checking && (
+            <span className="subtle">
+              {checkedAt.toLocaleTimeString()}
+            </span>
+          )}
         </div>
       </div>
     </div>
