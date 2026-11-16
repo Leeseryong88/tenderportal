@@ -1,0 +1,17 @@
+[
+  {
+    "origin": [
+      "https://YOUR-PRODUCTION-DOMAIN.example.com",
+      "https://YOUR-STAGING-PREVIEW.vercel.app"
+    ],
+    "method": ["GET", "POST", "PUT", "HEAD"],
+    "responseHeader": [
+      "Content-Type",
+      "Authorization",
+      "Content-Length",
+      "User-Agent",
+      "x-goog-resumable"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]

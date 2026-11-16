@@ -1,0 +1,65 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model (Server-Only via Firebase Admin SDK in v1)
+// ===============================================================
+//
+// All business JSON reads/writes go exclusively through authenticated
+// Next.js server API routes using Firebase Admin SDK and explicit
+// 8-step authorization (`src/lib/server/authz.ts`).
+//
+// Direct Firestore client SDK / REST reads and writes are DENIED by default
+// across all collections to prevent BOLA/IDOR, mixed-content PII leaks,
+// and privilege escalation.
+//
+// Cross-service Storage Rules (`storage.rules`) inspect:
+// - /memberships/{uid}: tenantId, role, status, supplierCompanyId, authzVersion, canManageAdmins
+// - /tenants/{tenantId}/tenders/{tenderId}/access/{uid}: companyId, enabled, published, deadlineAt
+//
+// Other server-only collections:
+// - /accountProfiles/{uid}
+// - /accessRequests/{uid}
+// - /invitationTokens/{tokenHash}
+// - /tenants/{tenantId}/settings/{id}
+// - /tenants/{tenantId}/tasks/{taskId}
+// - /tenants/{tenantId}/suppliers/{supplierCompanyId}
+// - /tenants/{tenantId}/supplierDirectory/{supplierCompanyId}
+// - /tenants/{tenantId}/projects/{projectId}
+// - /tenants/{tenantId}/tenders/{tenderId}
+// - /tenants/{tenantId}/tenders/{tenderId}/participants/{companyId}
+// - /tenants/{tenantId}/tenders/{tenderId}/supplierViews/{companyId}
+// - /tenants/{tenantId}/tenders/{tenderId}/submissions/{companyId}/versions/{versionId}
+// - /tenants/{tenantId}/files/{fileId}
+// - /tenants/{tenantId}/uploadIntents/{intentId}
+// - /tenants/{tenantId}/auditLogs/{eventId}
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Explicit deny-all client policy for v1.
+    // Even authenticated users must route through server APIs.
+    match /accountProfiles/{uid} {
+      allow read, write: if false;
+    }
+
+    match /accessRequests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /memberships/{uid} {
+      allow read, write: if false;
+    }
+
+    match /invitationTokens/{tokenHash} {
+      allow read, write: if false;
+    }
+
+    match /tenants/{tenantId}/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

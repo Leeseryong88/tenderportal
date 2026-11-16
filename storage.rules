@@ -1,0 +1,116 @@
+rules_version = '2';
+
+// ===============================================================
+// Cloud Storage Security Rules
+// ===============================================================
+// Constraints:
+// - Maximum 2 Firestore `firestore.get()` evaluations per request.
+// - No public buckets, no client `list` on protected/staging paths.
+// - Protected paths deny all client writes (server-only promotion).
+// - Staging creates require ACTIVE membership, verified email,
+//   UID/company/tenant scoping, and server-time deadline check.
+// ===============================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedInVerified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function membershipDoc() {
+      return firestore.get(/databases/(default)/documents/memberships/$(request.auth.uid));
+    }
+
+    function tenderAccessDoc(tenantId, tenderId) {
+      return firestore.get(/databases/(default)/documents/tenants/$(tenantId)/tenders/$(tenderId)/access/$(request.auth.uid));
+    }
+
+    function isActiveMember(m, tenantId, expectedRole) {
+      return m != null
+        && m.data.status == 'ACTIVE'
+        && m.data.tenantId == tenantId
+        && m.data.role == expectedRole;
+    }
+
+    function isGrantedSupplier(access, companyId) {
+      return access != null
+        && access.data.enabled == true
+        && access.data.published == true
+        && access.data.companyId == companyId;
+    }
+
+    // Supplier staging upload: write-once (resource == null), before deadline.
+    // Uses exactly 2 firestore.get() calls (membership + access).
+    match /staging/{tenantId}/{tenderId}/{companyId}/{uid}/{intentId}/{fileId} {
+      allow read, update, delete: if false;
+      allow create: if isSignedInVerified()
+        && request.auth.uid == uid
+        && resource == null
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 104857600
+        && isActiveMember(membershipDoc(), tenantId, 'SUPPLIER')
+        && membershipDoc().data.supplierCompanyId == companyId
+        && isGrantedSupplier(tenderAccessDoc(tenantId, tenderId), companyId)
+        && request.time < tenderAccessDoc(tenantId, tenderId).data.deadlineAt;
+    }
+
+    // Admin RFP staging upload: write-once (resource == null).
+    // Uses 1 firestore.get() call (membership).
+    match /staging/{tenantId}/{tenderId}/rfp/{uid}/{intentId}/{fileId} {
+      allow read, update, delete: if false;
+      allow create: if isSignedInVerified()
+        && request.auth.uid == uid
+        && resource == null
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 104857600
+        && isActiveMember(membershipDoc(), tenantId, 'ADMIN');
+    }
+
+    // Published RFP protected objects: Admin or granted Supplier, CLEAN scan only.
+    match /protected/{tenantId}/{tenderId}/rfp/{fileId}/{versionId} {
+      allow list, write: if false;
+      allow get: if isSignedInVerified()
+        && resource != null
+        && resource.metadata.scanStatus == 'CLEAN'
+        && (
+          isActiveMember(membershipDoc(), tenantId, 'ADMIN')
+          || (
+            isActiveMember(membershipDoc(), tenantId, 'SUPPLIER')
+            && isGrantedSupplier(tenderAccessDoc(tenantId, tenderId), membershipDoc().data.supplierCompanyId)
+          )
+        );
+    }
+
+    // Internal/unpublished RFP objects: Admin only.
+    match /protected/{tenantId}/{tenderId}/rfp-internal/{fileId}/{versionId} {
+      allow list, write: if false;
+      allow get: if isSignedInVerified()
+        && resource != null
+        && resource.metadata.scanStatus == 'CLEAN'
+        && isActiveMember(membershipDoc(), tenantId, 'ADMIN');
+    }
+
+    // Supplier submission protected objects: Admin or same-company granted Supplier, CLEAN scan only.
+    match /protected/{tenantId}/{tenderId}/submissions/{companyId}/{versionId}/{fileId} {
+      allow list, write: if false;
+      allow get: if isSignedInVerified()
+        && resource != null
+        && resource.metadata.scanStatus == 'CLEAN'
+        && (
+          isActiveMember(membershipDoc(), tenantId, 'ADMIN')
+          || (
+            isActiveMember(membershipDoc(), tenantId, 'SUPPLIER')
+            && membershipDoc().data.supplierCompanyId == companyId
+            && isGrantedSupplier(tenderAccessDoc(tenantId, tenderId), companyId)
+          )
+        );
+    }
+
+    // Default deny everything else
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

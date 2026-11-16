@@ -1,0 +1,445 @@
+IICOMBINED Tender Portal — Cursor 구축 마스터 프롬프트
+기준: 제공된 index.html 최종 프로토타입과 확정된 대화 요구사항 / 작성일: 2026-11-16
+기술 기반: Firebase + Vercel / 운영 조직: IICOMBINED
+
+[사용 방법]
+1. Cursor 프로젝트 폴더에 최종 index.html과 이 파일을 함께 넣는다.
+2. index.html은 reference/index.html로 보관해 원본을 유지한다.
+3. Cursor Agent에 이 파일 전체를 읽고 아래 요구사항대로 구현하도록 요청한다.
+4. 아래부터는 Cursor 개발 에이전트에게 내리는 지시다. 설명만 작성하지 말고 실제 코드·Rules·테스트·설정 문서를 구현한다.
+
+======================================================================
+0. 목표와 작업 원칙
+======================================================================
+너는 이 시스템을 구현하는 시니어 풀스택 엔지니어다. 기존 프로토타입의 화면과 업무 흐름을 유지하면서 실제 인터넷 환경에서 직원과 협력사가 서로 다른 계정으로 이용하는 입찰 접수 웹서비스로 재구축하라.
+
+운영자가 IT팀에 매번 의존하지 않고 계정 승인, 권한 배정, 협력사 Pool, 프로젝트, 입찰, 제출자료를 관리할 수 있어야 한다. 화면만 동작하거나 localStorage에서 데이터를 공유하는 시연으로 완료 처리하지 않는다.
+
+현재 운영 조직은 IICOMBINED 한 곳이다. 향후 확장을 위해 tenantId로 데이터를 격리하되, 구독 결제·고객사 공개가입·복잡한 조직 판매 기능은 만들지 않는다. 협력사는 별도 고객 테넌트가 아니라 IICOMBINED가 초청한 supplierCompany다.
+
+reference/index.html의 레이아웃·지도·업무 기능을 먼저 읽고 기능 대응표를 작성하라. 스크린샷 모방만 하지 말고 등록·검색·수정·파일 접수까지 구현한다. 기존 화면 보기 역할 전환, URL의 supplierId를 신뢰하는 처리, localStorage 권한·업무 데이터, 클라이언트 시간에 의한 마감 판정은 운영 코드에 이식하지 않는다. 지도 데이터의 출처와 라이선스 표시는 보존한다.
+
+최신 대화에서 확정된 권한을 우선한다. 사용자부서는 협력사 Pool만 열람한다. 과거의 'PM에게 프로젝트·입찰 열람 권한 부여'는 현재 기본 정책이 아니다. 평가, 계약, 승인 결재선, NDA 미체결 강제 초청 차단 등 미확정 업무 정책은 임의로 추가하지 않는다.
+
+기술적 기본값은 아래 제안대로 구현하고 문서화한다. 자격증명이나 업무상 결정이 필요한 부분만 모아서 질문한다. 질문 전에도 로컬 구현과 Emulator 검증은 계속한다. 사용자 설정이 필요한 서비스에 연결되지 않았다면 실제 운영 연결 완료라고 보고하지 않는다.
+
+======================================================================
+1. 기술 구조
+======================================================================
+- 프론트엔드/웹 API: Next.js App Router + TypeScript, Vercel 배포.
+- UI: 기존 IICOMBINED의 흰색·녹색 디자인을 유지하는 반응형 컴포넌트.
+- 인증: Firebase Authentication. 기본 이메일/비밀번호, 이메일 인증, 비밀번호 재설정. Google 로그인은 선택 기능이며 승인 절차를 우회하지 않는다.
+- 업무 데이터: Cloud Firestore 기본 데이터베이스.
+- 파일: Cloud Storage for Firebase 비공개 버킷.
+- 서버 인증/DB 접근: Firebase Admin SDK를 서버 전용 모듈에서만 사용.
+- 필요시 백그라운드 파일 검사·정리: Firebase Cloud Functions 등 실제 배포 가능한 Firebase/Google Cloud 구성. 추가 서비스·비용은 설정 문서에 표시.
+- 입력 검증: Zod 등 서버/클라이언트 스키마 검증.
+- 다국어: key 기반 한국어/영어 리소스. DOM 문자열 치환 방식 사용 금지.
+- 날짜: UTC 시각 저장 + IANA 시간대 + 날짜만 있는 업무 일정의 dateLocal을 구분.
+- 개발: Firebase Emulator Suite, 단위/통합 테스트, Playwright 실제 역할별 E2E.
+
+구현 시점에 지원되는 안정 버전을 공식 문서로 확인하고 package.json과 lockfile을 고정한다. 설치 명령, Node 버전, 테스트/빌드 명령을 README에 명시한다.
+
+업무 JSON 데이터 접근은 Next.js 서버 API/서버 서비스 계층으로 통일한다. 초기 버전의 Firestore 클라이언트 직접 read/write는 기본 전부 차단한다. 프론트엔드가 Admin SDK를 직접 사용하거나 전체 컬렉션을 받은 후 숨기는 구조는 금지한다. Admin SDK는 Firestore Rules를 우회하므로 서버의 모든 경로에서 별도 권한 검증이 필수다.
+
+파일 바이트는 Vercel API 본문을 통과시키지 않는 구조를 기본으로 한다. Firebase Storage SDK의 인증된 직접 전송을 사용하고, 서버 API는 업로드 의도 생성·검증·접수 확정·다운로드 권한 판정을 담당한다. 대용량 견적서와 도면을 API multipart 본문으로 보내는 구조를 피한다.
+
+======================================================================
+2. 역할과 화면 — 권한표가 구현의 기준이다
+======================================================================
+역할 enum:
+ADMIN = 구매팀 관리자
+USER_DEPARTMENT = 사용자부서
+SUPPLIER = 외부 협력사
+PENDING/REJECTED/DISABLED = 역할이 아니라 계정 접근 상태
+
+권한표:
+기능                           ADMIN             USER_DEPARTMENT         SUPPLIER
+관리자 대시보드                 동일 tenant 전체  불가                    불가
+프로젝트 등록·수정·조회          동일 tenant 전체  불가                    초청 입찰에 필요한 요약만
+입찰 등록·수정·제출현황          동일 tenant 전체  불가                    본인에게 허용된 입찰만
+협력사 Pool                     등록·수정·열람    승인된 Pool 필드만 열람   전체 Pool 접근 불가
+입찰 초청업체/경쟁사 목록        열람·관리         불가                    불가
+업체별 제안서·견적·금액          열람              불가                    본인 업체 + 배정된 입찰만
+입찰 자료/RFP 다운로드          전체              불가                    초청 입찰의 공개된 자료만
+회원 승인·권한·업체 연결         관리              불가                    불가
+감사로그/설정                   관리              불가                    불가
+
+ADMIN의 '전체'는 해당 tenant 내부다. 다른 tenant의 관리자 권한까지 포함하지 않는다.
+
+화면 경로:
+- /login, /signup, /verify-email, /forgot-password
+- /account/pending, /account/rejected, /account/disabled
+- /admin/dashboard, /admin/projects, /admin/tenders, /admin/suppliers, /admin/users, /admin/settings, /admin/audit
+- /department/suppliers 및 열람용 상세
+- /supplier/tenders 및 초청 입찰 상세·제출·접수증
+
+관리자에는 대시보드·프로젝트·입찰·협력사 Pool·사용자 및 권한·설정 메뉴를 제공한다. 대시보드에서 입찰 생성 버튼을 중복 제공하지 않는다. 제출현황은 입찰 메뉴 내부 탭에 통합한다.
+사용자부서는 협력사 Pool만 표시한다. 공급업체 정보, 업체 유형, 수행 지역, 업무 담당자, 면허/자격, NDA 체결상태를 열람한다. NDA 원본, 내부 평가 메모, 입찰 이력, 금액, 제출자료, 다른 사용자 개인정보는 응답에서 제거한다.
+협력사는 내 입찰 목록 화면 하나로 대시보드와 입찰 메뉴를 합친다. 본인의 초청 건수, 제출 필요 건수, 본인 제출 상태, 제출 이력과 접수증을 보여준다.
+
+중요: 관리자의 전사 상태 '접수 중'을 협력사에게 그대로 전달하면 경쟁사가 제출했음을 추론할 수 있다. 협력사 응답에는 다른 업체의 참여수·제출수·이름·이메일·상태를 보내지 않는다. 협력사에는 '제출 가능/마감'과 '본인 업체 미제출/제출 완료'만 보여준다. 관리자 상태 enum을 협력사 API에서 그대로 직렬화하지 않는다.
+
+모든 역할에 한국어/영어 선택을 상단 동일 위치에 제공한다. 운영 화면에는 '관리자로 보기/업체로 보기'와 같은 무인증 역할 전환 기능을 두지 않는다. 로컬 시연 계정은 Emulator/개발 환경에서만 제공한다.
+
+======================================================================
+3. 회원가입 → 관리자 승인 → 권한 배정
+======================================================================
+3.1 회원가입
+- 이름, 이메일, 비밀번호, 소속/부서 또는 회사명, 연락처, 신청 구분(사용자부서/협력사)을 받는다.
+- 공개 회원가입에서 ADMIN은 선택할 수 없다.
+- requestedRole/requestedCompany는 심사 자료일 뿐 실제 권한으로 사용하지 않는다.
+- 이메일 인증 후 승인 신청을 접수한다. 회사 이메일 도메인 일치만으로 자동 승인하지 않는다.
+- 가입 직후 membership은 PENDING, 실제 role/supplierCompanyId는 미부여 상태다.
+- 이메일 미인증/PENDING은 본인 계정 확인, 인증 재발송, 본인 신청상태 확인, 로그아웃만 허용한다.
+- 계정 생성만으로 Pool, 프로젝트, 입찰, 파일, 다른 가입 신청을 읽을 수 없어야 한다.
+- 재가입·중복 신청·이메일 대소문자·기존 Google 계정과의 중복을 안전하게 처리한다. 로그인 공급자 연결도 Firebase 공식 검증 절차를 따른다.
+
+3.2 관리자 화면
+사용자 및 권한에서 '승인 대기/승인/거절/사용중지'를 조회한다. 신청 상세에 요청내용, 검증된 이메일, 승인 이력, 실제 배정 권한을 분리 표시한다.
+
+승인 절차:
+1) 신청자와 소속 확인.
+2) 실제 role을 관리자/사용자부서/협력사 중 권한 범위 내에서 배정.
+3) 협력사인 경우 기존 Supplier Pool의 정확한 supplierCompanyId에 연결. 회사명 문자열/이메일 도메인으로 자동 연결 금지.
+4) 동일 회사의 다른 직원도 별도 계정으로 승인. 회사명이 같다는 이유로 자동 승인 금지.
+5) 승인 완료 후 해당 역할 첫 화면으로 이동. 협력사에게는 이후 실제 배정된 입찰만 열린다.
+
+협력사 회사 소속 승인과 입찰별 접근권한은 별개다. 계정이 supplierCompany에 속한다고 그 업체의 모든 입찰을 자동 열람시키지 않는다. 관리자가 입찰별로 접근 가능한 승인 계정을 지정한다. 같은 회사에서 같은 입찰에 배정된 사용자끼리는 해당 업체 제출자료를 공유할 수 있도록 한다. 이 범위를 승인 화면에 명시한다.
+
+3.3 최초 관리자 및 관리자 권한
+- 최초 관리자는 공개 웹 API가 아닌 운영자 전용 bootstrap 스크립트로 생성한다.
+- 운영자가 지정한 실제 Firebase UID/검증된 이메일/tenant를 확인하고 한 번 실행한다.
+- '첫 가입자 자동 관리자', 숨겨진 기본 비밀번호, 클라이언트에서 bootstrap secret 입력 방식 금지.
+- bootstrap 실행 후 역할 및 실행자·시간을 감사로그에 기록한다.
+- 다른 관리자를 임명할 수 있는 canManageAdmins 권한은 최초 소유 관리자에게만 기본 부여한다. 일반 관리자는 사용자부서/협력사 승인만 가능하다.
+- 마지막 활성 관리자 삭제/강등/정지를 막고 운영자 복구 절차를 문서화한다.
+- 승인, 역할 변경, 회사 재연결은 최근 재인증을 요구한다. 관리자 MFA 지원 구성과 계정 복구 방법을 설정 문서에 포함한다.
+
+3.4 정지·권한 변경
+- 회원 승인상태와 역할의 최종 기준은 서버 보호 membership 문서다.
+- Custom Claims는 서버에서만 변경하고 최소 필드만 유지한다. 입찰 ID 목록이나 개인정보를 claims에 넣지 않는다.
+- 역할 변경/정지 시 authzVersion 증가, 토큰/세션 폐기, 필요시 계정 비활성화 및 기존 입찰 grants 해제를 수행한다.
+- 오래된 토큰/열려 있는 탭도 다음 보호 요청에서 차단되도록 현재 membership 상태와 버전을 매 요청 확인한다. claims 갱신만 기다리는 방식은 금지한다.
+- Auth 변경과 Firestore 변경은 단일 트랜잭션이 아니므로 우선 권한을 차단하고, 재시도 가능한 승인 워크플로로 처리한다. 일부 실패 시 승인 완료로 표시하지 않는다.
+- company 재연결 시 이전 업체의 입찰 접근권한이 따라오지 않도록 기존 grants를 폐기한다.
+
+======================================================================
+4. 서버·데이터·파일에서 권한을 강제하는 방법
+======================================================================
+모든 보호 API, Server Action, 서버 렌더 데이터 조회는 아래 순서를 적용한다.
+1) Firebase ID token 또는 Firebase session cookie의 서명, 만료, 대상 프로젝트, 폐기 여부 검증.
+2) 이메일 인증 여부 및 현재 membership ACTIVE 여부 확인.
+3) 현재 role/tenantId/supplierCompanyId/authzVersion을 서버 저장값으로 확정.
+4) 요청 대상 문서가 같은 tenant에 속하는지 검증.
+5) action에 맞는 역할 검사.
+6) 협력사라면 현재 유효한 UID별 입찰 grant + supplierCompanyId + 실제 입찰 참가 관계 검증.
+7) 수정·제출·다운로드 대상 파일까지 같은 tenant/tender/company 소유관계 검증.
+8) allowlist DTO로 응답하고 필요한 감사 이력을 남김.
+
+URL, body, localStorage에 있는 role/tenantId/supplierCompanyId/uid/Storage path는 권한의 근거가 아니다. 객체 ID를 바꿔 접근하는 IDOR/BOLA 공격을 막는다. 자료가 존재하지만 권한이 없는 경우에도 파일명·업체명·금액 등 단서를 반환하지 않는다.
+
+공통 authorize(action, actor, resource) 계층을 만들고 역할별 API가 재사용한다. middleware의 메뉴/라우트 차단은 UX이고 서버 자원 검사를 대체하지 않는다.
+
+Cookie 인증을 사용하면 HttpOnly/Secure/SameSite, CSRF 방어, 허용 Origin 확인을 적용한다. API는 bearer token 또는 검증된 cookie 처리 중 인증 방식을 명시하고 모호한 혼용을 피한다. Storage SDK가 Firebase ID token을 사용할 경우 cookie와의 로그아웃/정지 동기화도 구현한다.
+
+비공개 응답에는 Cache-Control: private, no-store를 적용한다. Next.js 캐시, CDN 캐시, SSR 데이터, RSC payload, React Query 캐시가 사용자 간 섞이지 않게 한다. 로그아웃/계정변경 시 클라이언트 업무 캐시를 비운다. 민감한 Firestore 오프라인 영구 캐시는 기본 사용하지 않는다.
+
+전체 tender 문서를 협력사에게 보내고 프론트에서 bidders/submissions만 숨기는 방식은 금지한다. Firestore 문서 권한은 필드별 마스킹을 자동 제공하지 않으므로 입찰 관리자 문서, 협력사 공개 projection, 사용자부서용 Pool projection을 분리한다. 서버 DTO 역시 명시적 allowlist로 구성한다.
+
+Firestore Rules는 기본 거부하고 업무 컬렉션의 client read/write를 열지 않는다. 서버 Admin SDK를 쓰는 API의 인가 테스트와 Firestore Rules 테스트를 별도로 작성한다. 추후 클라이언트 조회를 허용할 경우 Rules는 결과를 필터링해 주지 않는다는 점을 반영해 쿼리/문서 경계를 함께 설계한다.
+
+======================================================================
+5. 데이터 모델 기준
+======================================================================
+구체적인 인덱스와 타입을 작성하라. 예시 구조는 다음과 같다. 구조를 바꾸더라도 권한 경계와 불변조건을 보존한다.
+
+/accountProfiles/{uid}: 본인 기본 프로필. role/승인상태를 사용자 수정 필드와 분리.
+/accessRequests/{requestId}: 신청 uid, verifiedEmail, requestedRole, 요청 회사·부서, 상태, 결정자/시각.
+/memberships/{uid}: tenantId, role, status, supplierCompanyId|null, authzVersion, canManageAdmins. 서버 전용 권한 원장. 초기 버전은 계정당 하나의 운영 조직 membership.
+/tenants/{tenantId}/settings/{id}: 정책/표시 설정.
+/tenants/{tenantId}/suppliers/{supplierCompanyId}: 업체정보, 국가코드, 유형, NDA 상태, 지역, 담당자.
+/tenants/{tenantId}/supplierDirectory/{supplierCompanyId}: 사용자부서 열람 허용 필드 projection.
+/tenants/{tenantId}/projects/{projectId}: 위치/유형/담당자/masterSchedule/시간대.
+/tenants/{tenantId}/tenders/{tenderId}: 관리자 전용 입찰 원장. publicationState, deadlineAt, timeZone, revision, receivedCompanyCount 등.
+/tenants/{tenantId}/tenders/{tenderId}/participants/{supplierCompanyId}: 업체별 초청/진행 관계.
+/tenants/{tenantId}/tenders/{tenderId}/access/{uid}: UID별 접근 grant. companyId, enabled, published, deadlineAt 등 Storage 검증에 필요한 최소값. 경쟁사 현황 제외.
+/tenants/{tenantId}/tenders/{tenderId}/supplierViews/{supplierCompanyId}: 해당 업체에 공개할 입찰정보. 다른 업체의 관계/집계 없음.
+/tenants/{tenantId}/tenders/{tenderId}/submissions/{supplierCompanyId}/versions/{versionId}: 불변 제출 패키지, 제출자 UID, 서버 접수시간, 파일 manifests, 접수번호.
+/tenants/{tenantId}/files/{fileId}: 경로·소유범위·파일종류·크기·hash·object generation·검사상태·등록자.
+/tenants/{tenantId}/uploadIntents/{intentId}: 서버가 발행한 업로드 대상/개수/크기/만료·uid/company/tender 바인딩.
+/invitationTokens/{tokenHash}: tokenHash, tenantId, tenderId, companyId, 대상 이메일, 만료, 소비/폐기 상태. 서버 전용.
+/tenants/{tenantId}/auditLogs/{eventId}: 변경 전후 요약/행위자/대상/서버시간/요청 ID. 사용자 수정 불가.
+
+tenantId, supplierCompanyId, tenderId, createdByUid, role, approvalStatus, acceptedAt, authzVersion 등 보호 필드는 클라이언트 입력의 mass assignment로 바뀌지 않게 한다.
+Membership/participation/파일 scope의 교차 tenant 관계는 생성 시에도 검증한다.
+회사명과 표시 이메일로 관계를 연결하지 말고 불변 ID를 쓴다.
+제출자료는 기존 파일을 덮어쓰지 않고 버전별로 보존한다.
+
+======================================================================
+6. 파일 업로드·접수·다운로드
+======================================================================
+클라이언트 → Firebase Storage 직접 업로드를 기본으로 구현한다. API에 파일 바이너리를 싣지 않는다. 인증 없이 열리는 공개 버킷, 장기 download token URL, 권한검사 없는 getDownloadURL 공유를 운영 기본으로 사용하지 않는다.
+
+권장 경로:
+staging/{tenantId}/{tenderId}/{companyId}/{uid}/{intentId}/{fileId}
+protected/{tenantId}/{tenderId}/rfp/{fileId}/{versionId}
+protected/{tenantId}/{tenderId}/submissions/{companyId}/{versionId}/{fileId}
+
+경로 자체가 보안은 아니다. Storage Rules에서 현재 회원 승인/tenant/역할/UID별 grant/회사 scope를 확인한다. 보호된 파일의 owner/kind/finalized/scan 상태 등 metadata는 서버만 기록·변경할 수 있어야 한다.
+
+Storage Rules 구현 제약:
+- Firestore 참조 문서 수 제한을 확인한다. 현재 한 평가에서 최대 두 문서이므로 membership + 해당 UID의 tender access grant로 검증 가능하게 설계한다.
+- 비공개 파일의 클라이언트 list는 막는다. 개별 파일 read는 인증과 현재 권한으로 검증한다.
+- staging은 자기 UID·회사·tenant·초청입찰 경로에만 신규 생성 가능. 기존 객체 overwrite/update/delete 및 다른 사람 staging 읽기는 차단한다.
+- supplier staging create는 request.time < grant.deadlineAt, published, enabled를 모두 검사한다.
+- RFP staging 업로드는 승인된 관리자만 허용한다.
+- protected 경로의 클라이언트 write는 모두 차단한다. 검사/접수 확정은 서버가 불변 객체와 신뢰할 metadata로 처리한다.
+- Storage Rules의 교차 서비스 Firestore 접근 권한 설정을 배포 문서에 포함한다.
+- membership과 grant는 클라이언트가 직접 조작할 수 없어야 한다.
+- grants는 별도 권한원장이 아니라 서버가 관리하는 authorization projection이다. 초청 회수·마감 변경·공개 변경 시 원장과 함께 갱신한다. 원장만 바뀌고 과거 grant로 파일을 읽거나 늦게 업로드할 수 없도록 한다. 트랜잭션 한도를 넘는 작업은 차단 우선 방식으로 처리한다.
+
+업로드 흐름:
+1) 서버가 현재 권한/입찰상태를 확인하고 uid·업체·입찰에 바인딩된 uploadIntent 발행.
+2) 클라이언트가 허용된 staging에 진행률·재시도 가능한 업로드.
+3) 제출 버튼은 finalize API 호출. 서버가 intent, 실제 저장된 object의 generation/크기/확장자/형식/소유범위를 다시 검증.
+4) 파일 개수·용량·허용형식은 서버 설정으로 제한. 초기 기술 기본값 예: 파일당 50MB. 실제 허용 형식/총용량은 명시적 설정으로 관리하고 확정된 회사 정책이라고 표현하지 않는다. MIME만 믿지 말고 실제 파일 형식과 압축파일 위험도 검사.
+5) 서버 트랜잭션에서 현재 시각, 현재 입찰 revision/deadline, 현재 membership/참가권한을 재검증하고 immutable 제출 패키지와 접수시각/접수번호를 기록. 파일 metadata만 올린 상태는 제출로 계산하지 않는다.
+6) 마감 전에 업로드를 시작했어도 finalize 시각이 마감 이후면 접수 불가. 재시도 시 새 접수시각을 조작하지 않도록 idempotency key를 사용한다.
+7) 서버에 완전한 파일 패키지가 접수된 시각을 기록하고, 비동기 악성파일 검사는 별도 상태로 표시한다. 검사 대기·실패 파일은 다운로드 불가. 검사 결과가 늦게 나왔다는 이유로 접수시각을 변경하지 않는다. 유해 파일 처리나 마감 후 보완 허용은 관리자가 결정할 수 있게 기록만 남기고 자동 재접수 정책을 만들지 않는다.
+8) Firestore와 Storage는 단일 원자 트랜잭션이 아니므로 임시/확정 상태, 재처리, orphan 정리, 실패 복구를 설계한다. 최종 객체 불변성/세대번호를 보장해 검사 후 바꿔치기를 막는다. DB 확정 전에 '제출 성공' 토스트를 띄우지 않는다.
+
+다운로드:
+- 파일 ID로 조회할 때마다 권한검사. 본인 업체의 배정된 입찰 자료와 관리자가 공개한 RFP만 외부에 제공.
+- 인증된 getBlob/getBytes 같은 SDK 전송과 Storage Rules를 기본 사용한다. CORS 허용 origin을 실제 배포 origin으로 제한한다.
+- getDownloadURL 장기 토큰 및 공개 ACL을 만들지 않는다. 기존 객체에 다운로드 토큰이 자동 생성될 수 있는지 확인하고 보호 객체의 토큰 유출·재사용도 테스트한다.
+- signed URL을 대안으로 선택할 경우 Rules 우회 및 URL 수명 동안 공유 가능하다는 한계를 기록하고 사용자 결정 없이 장기 링크로 바꾸지 않는다.
+- 외부에 내보내는 파일은 attachment 다운로드를 기본으로 하고 임의 HTML/SVG를 같은 origin에서 실행하지 않는다.
+- 이미 허용된 다운로드로 사용자 장치에 저장된 파일은 시스템에서 회수할 수 없다는 한계를 운영 문서에 명시한다.
+
+운영용 악성파일 검사·실패 처리·App Check·업로드 제한이 mock이라면 운영 완료로 표시하지 말고 production 전환을 막는다. App Check는 권한검사를 대체하지 않는다.
+
+======================================================================
+7. 초청 링크
+======================================================================
+- 관리자만 입찰 참여업체를 선택하고, 그 업체에 연결된 승인 계정 또는 초청 이메일을 지정한다.
+- 충분히 긴 암호학적 난수 토큰을 사용하고 DB에는 hash만 저장한다.
+- tenant/tender/company/정규화된 대상 이메일/만료/폐기 상태에 바인딩한다.
+- 링크를 아는 것만으로 입찰을 열 수 없다. 로그인, 이메일 검증, 관리자 승인, 업체 연결이 필요하다.
+- 다른 회사/다른 이메일 계정은 토큰을 받아도 claim할 수 없다. 이메일 변경 시 재인증과 재검증을 요구한다.
+- 미가입자는 가입·승인 대기 후 동일 초청을 이어서 처리한다. 초청 자체가 자동 승인 수단이 되지 않는다.
+- 토큰 claim은 트랜잭션으로 단일 소비. 재발행·회수·만료·재사용을 구분한다.
+- claim 후에는 persistent UID별 grant로 접근한다. 초청 토큰을 매번 권한키로 쓰지 않는다.
+- 공개 초청 랜딩은 검증 전 프로젝트명/참여업체를 노출하지 않는다. 토큰을 로그/분석도구/Referer에 남기지 않고 claim 후 주소를 정리한다.
+- 초기 MVP는 관리자가 링크 복사 후 직접 전달할 수 있으면 충분하다. 자동 메일 발송은 별도 실제 메일 서비스 설정이 끝나기 전 '발송 완료'라고 표시하지 않는다.
+
+======================================================================
+8. 업무 기능 보존 및 개선
+======================================================================
+8.1 관리자 대시보드
+- 오늘 날짜, 오늘 해야 할 업무 최상단, 월 달력, 날짜별 일정, 진행 중 프로젝트/입찰, 업체별 제출 현황, 임박 마감.
+- 실시간 갱신 또는 짧은 주기의 권한 있는 서버 조회. 하드코딩한 더미 실적을 운영 수치에 섞지 않는다.
+- 서버 기준 오늘과 사용자의 표시 시간대(관리자 기본 Asia/Seoul)를 구분한다. 해외 마감은 프로젝트 현지 시각과 관리자 시각을 함께 보여 날짜 차이를 설명한다.
+
+8.2 프로젝트
+- 국가·도시·명칭·담당자·유형·상태·기본 일정 등록/수정.
+- 유형: 백화점, FS, Maison, 건축, 대수선. 기존 기타 유형은 마이그레이션 시 유실시키지 않는다.
+- 프로젝트명/국가/도시/담당자 검색, 국가 필터, 결과 수, 빈 결과 안내.
+- 번역된 label을 필터 value로 쓰지 않는다. 언어 변경 시 검색/상태필터가 깨지지 않게 한다.
+
+8.3 일정
+기본 8단계: RFP 배포 / RFI 접수 / RFI 답변 / RFP 접수 / Interview·PT / PTC 발송 / PTC 접수 / 업체선정.
+이 단계들은 일정 관리다. 전용 질의응답·PTC 문서 워크플로까지 이미 구현된 기능인 것처럼 표현하지 않는다.
+
+상태: UNSET=공란(일정 미설정), NOT_APPLICABLE=미대상(단계 미진행), PLANNED=예정.
+- 공란/미대상 선택 시 날짜를 null로 지우고 달력 이벤트를 제거한다.
+- 날짜 입력 시 예정으로 전환한다. 날짜가 남아 있다고 선택한 미대상을 다시 예정으로 덮어쓰는 버그를 재현하고 차단한다.
+- 저장 후 재조회·다른 브라우저·새로고침에서도 상태가 유지되어야 한다.
+- 입찰은 프로젝트 기본 일정을 상속. 단계별 INHERITED/OVERRIDE 출처를 저장한다.
+- 프로젝트 변경은 상속 단계에만 전파. 입찰별 명시적 조정은 유지하고 '입찰에서 별도 설정됨'을 표시한다. 상속 복원 버튼을 둔다.
+- 달력에서 같은 상속 이벤트의 중복을 방지하고 각 이벤트의 프로젝트/입찰 출처를 표시한다.
+- 제출 마감 datetime은 단계별 date-only 일정과 별도로 항상 연동한다. 마감이 지났다는 이유로 달력 이력을 없애지 않는다.
+- 국가·도시로 IANA 시간대를 추천하되 직접 수정 가능. DST는 선택한 마감 날짜 기준으로 계산한다. 존재하지 않는 시각은 거부하고, 두 번 존재하는 시각은 offset을 명확히 선택시킨다.
+
+8.4 입찰 생성/관리
+- 프로젝트 선택, 입찰명/유형, 일정, 시간대, 마감, 제출 필수자료, 설명, RFP 업로드, 업체 초청.
+- 업체는 검색/스크롤 가능한 체크박스로 개별 선택.
+- 업체명 앞 [PM]/[AOR]/[GC]/[MAT] 유형 표시. NDA 체결여부를 먼저, 수행가능지역을 다음으로 표시. 이 선택창에는 본사 위치를 반복 노출하지 않는다.
+- 임시 저장과 생성 완료 버튼 분리. 초안은 미완성 저장 가능하며 외부 공개 불가.
+- 입찰 목록에 상세 보기와 수정 버튼을 모두 제공해 수정 기능 추가로 제출자료/초청링크 상세가 사라지지 않게 한다.
+
+관리자 업무 상태:
+DRAFT → 작성 중: 임시 저장, 업체 제출 불가.
+OPEN → 입찰 진행 중: 생성 완료, 유효한 마감/초청이 있어 제출 가능, 접수 0개 업체.
+RECEIVING → 접수 중: 1개 이상 업체의 완전한 패키지가 서버에 접수됨.
+CLOSED → 입찰 마감: 서버 시각 >= 마감시각, 업로드/접수 확정 모두 제한.
+
+마감 판정은 서버와 Storage Rules에서 수행한다. 브라우저 타이머/Cron 실행 여부/저장된 상태 enum만으로 판단하지 않는다. 화면 조회 시에도 현재 시각으로 상태를 계산한다. 서버가 멈춘 동안 마감되었어도 이후 제출이 열리지 않아야 한다.
+
+마감 전 진행 중 입찰은 수정 가능. 한 업체라도 제출한 뒤 수정 클릭 시 아래 문구를 정확히 표시하고 '취소/수정 계속'을 제공한다.
+“이미 업체가 입찰서류를 제출했습니다. 수정내용에 대해 입찰 참여사에 꼭 안내해주시기 바랍니다.”
+
+수정에는 revision·변경 사유·작성자·서버시간을 남긴다. 기존 제출자료와 접수시간 보존. 공개된 입찰 수정 화면에서는 '수정사항 저장'을 사용하고 임시 저장으로 DRAFT에 되돌아가는 회귀를 막는다. 경고 확인을 메일 통지 완료로 간주하지 않는다. 이미 제출한 업체를 삭제해 제출 이력을 지우지 않는다. 종료된 입찰의 재개/예외접수 정책은 기본 비활성이고 사용자 확정 없이 추가하지 않는다.
+
+8.5 제출 및 관리자 열람
+- 협력사별 RFP 다운로드, 제안서·견적서 파일 업로드, 제출 전 검토, 최종 제출, 접수번호·서버시각 확인.
+- 마감 전 재제출은 새 버전으로 보존하고 최신 유효 제출을 표시한다. 동일 업체의 동시 제출은 트랜잭션으로 일관성을 유지한다.
+- 관리자 입찰 상세의 제출현황 탭에서 업체별 미제출/제출시간/버전/파일목록/다운로드 확인.
+- 요청된 기본 정책은 관리자가 접수된 견적을 확인하는 방식이다. 마감 후에만 열람하는 봉인입찰이나 자동 가격평가를 임의로 넣지 않는다.
+- 자동 견적금액 추출/비교/평가는 향후 확장으로 남긴다.
+
+8.6 협력사 Pool·지도
+- 회사명, 유형, 본사 위치, NDA 상태/일자, 국가·도시별 복수 담당자, 면허/자격/만료일, 회사상태, 서비스 커버리지 관리.
+- 서비스 커버리지는 countryCode(ISO 3166-1 alpha-2), subdivisionCode(필요시 ISO 3166-2), cityId/표시명, deliveryMode를 구조화한다. 예: AU, US-TX, Direct/Local Partner/Unavailable.
+- 지도 라이브러리/GeoJSON의 키와 내부 국가코드 간 명시적 매핑을 둔다. 영문명 문자열 자체를 데이터 식별자로 사용하지 않는다.
+- Australia/AU/AUS/호주/오스트레일리아 등 기존 값은 AU로, Texas/TX는 US-TX로 안전하게 변환. 인식 불가 레거시 값은 유실하지 않고 검토 대상으로 표시한다.
+- 본사 국가 필드와 수행국가 필터를 구분한다. 미국 본사 업체라도 호주 수행 커버리지가 있으면 호주에서 검색되어야 한다.
+- 커버리지 국가/지역을 선택하면 지도 미리보기 갱신. 저장 후 글로벌 지도·국가별 지도·업체 목록·초청 검색에 같은 데이터가 반영.
+- 세계 백지도, 국가 경계 확대, 미국 주별 백지도를 보존한다. 호주 등 다른 국가의 주 경계는 현재 범위에 없는 기능이므로 국가 단위 표시를 명확히 한다.
+- 국가 전체 가능을 선택하면 하위 주 조회에서도 표시한다. 국가 전체와 특정 주의 상충 상태가 있으면 더 구체적인 지역 설정 우선 등 기술 규칙을 명시하고 테스트한다. 근거 없이 도시 수행가능성을 확장하지 않는다.
+- 목록 최상단에 검색 컬럼 선택 + 키워드 입력, 기본 업체명. 소재국가/유형/수행지역/수행방식/면허/NDA/상태 검색을 지원한다. 한영 라벨 및 공통 별칭을 검색 인덱스에 반영.
+- Firestore가 임의 부분문자열 검색을 자동 제공한다고 가정하지 않는다. MVP 데이터 규모에서 권한 있는 서버가 안전한 projection을 대상으로 검색하는 방식 또는 명시적 인덱스 전략을 구현하고 한계를 문서화한다. 외부 검색 서비스에 민감정보를 임의 전송하지 않는다.
+
+======================================================================
+9. 운영 설정 화면과 운영자 설명서
+======================================================================
+앱의 /admin/settings에서 관리자만 변경 가능한 항목:
+- 운영 조직명, 표시 시간대, 기본 언어, 허용 파일 형식/용량, 초청 유효기간 등.
+- 계정 신청/승인, 역할 변경, 업체 계정 연결, 입찰별 사용자 배정, 접근 회수는 /admin/users 및 입찰 상세에서 처리.
+- API key, service account private key 같은 인프라 secret을 일반 웹 설정 화면에 저장하지 않는다.
+- NDA 체결상태는 확인 항목이다. 미체결 업체 초청을 강제로 막는 정책은 기본 도입하지 않는다.
+
+docs/SETUP_KO.md에는 처음 사용하는 운영자가 따라 할 수 있도록 다음 순서·실제 명령·값의 출처를 설명한다.
+
+A. 계정 소유/환경 분리
+- 조직 소유의 Firebase/Google Cloud, Vercel, Git 저장소 사용. 소유자/복구 담당자 기록.
+- 개발은 Emulator, 시험용 Firebase 프로젝트, 운영용 Firebase 프로젝트를 분리한다.
+- Vercel Preview는 시험용 Firebase에만 연결한다. 운영 secret/업무 파일을 Preview/PR 환경에 넣지 않는다.
+
+B. Firebase Console
+1) 프로젝트 생성 및 Web app 등록. Firestore/Storage 및 사용하는 Functions의 지원 리전과 데이터 보관 위치를 검토하고 선택값 기록. Authentication 등 다른 서비스도 저장 위치 제약을 별도로 확인한다. 코드가 임의 리전을 확정하지 않는다.
+2) Authentication → Sign-in method에서 이메일/비밀번호 활성화. 이메일 인증/재설정 템플릿과 실제 서비스 도메인 설정.
+3) 승인 대기 계정이라도 Firebase Auth 사용자 자체는 생긴다는 점과 업무 접근은 앱 membership으로 제한된다는 점 설명.
+4) Firestore 생성 → 테스트 모드 공개 Rules 금지 → 저장소에 있는 Rules/인덱스 배포.
+5) Storage 생성 → 비공개 규칙, 파일 전송 CORS, Rules의 Firestore 참조 권한, 토큰 없는 보호 파일 다운로드 확인.
+6) App Check 웹 등록 및 Storage/API 검증. 개발용 debug token이 production에 배포되지 않게 한다.
+7) Storage 이용에 필요한 현재 요금제를 공식 문서로 재확인하고 결제 연결/예산 알림 설정. 예산 알림은 자동 지출 상한이라고 안내하지 않는다.
+8) 백업/PITR·파일 복구/보관기간·권한변경 로그 보관 정책을 설정 가능한 항목으로 설명. 조직 정책은 운영자가 확정한다.
+9) 실제 함수·파일 검사 worker를 사용하는 경우 해당 배포와 IAM·비용·재시도 설정까지 안내.
+
+C. 서버 자격증명
+- 가능하면 Vercel OIDC/Workload Identity Federation 등 비밀키 없는 서버 인증의 지원 상태를 확인해 사용한다. 어렵다면 별도 최소권한 service account를 서버 환경변수로 설정하고 회전 절차를 제공한다.
+- 프로젝트 Owner/Editor를 서비스 계정에 그대로 부여하지 않는다. Auth 사용자/claims 관리, 필요한 DB/Storage 작업만 허용하는 IAM을 설명한다.
+- Admin private key를 Git, 브라우저 bundle, NEXT_PUBLIC_ 변수에 넣지 않는다.
+- Firebase Web config/apiKey는 클라이언트 설정값이며 그것을 숨기는 것이 접근제어를 대신하지 않는다고 설명한다.
+
+D. 환경변수
+.env.example에는 실제 값 대신 placeholder만 넣고 각 변수의 출처·서버전용 여부·Dev/Preview/Production 구분을 표로 작성한다.
+예: NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, NEXT_PUBLIC_FIREBASE_APP_ID, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, App Check 공개 site key.
+서버전용 예: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY(키 방식인 경우), APP_BASE_URL, ALLOWED_ORIGINS, 운영자 bootstrap 설정. 실제 구현에 사용하지 않는 변수는 넣지 않는다.
+
+E. Vercel
+1) Git 프로젝트 연결, Next.js 프레임워크/루트/빌드명령/Node 런타임 지정.
+2) 환경별 변수를 설정하고 production 배포 branch 지정.
+3) Preview URL과 운영 도메인을 Firebase 인증 허용 도메인·메일 action URL·Storage CORS에 맞춤.
+4) 서버 Admin SDK는 Node 런타임 호환 경로에서만 사용. 비공개 응답 캐시 차단.
+5) 빌드와 Functions 제한을 확인. 파일 바이트는 Storage로 직접 전송하고 413 오류를 억지로 설정값 하나로 해결했다고 주장하지 않는다.
+6) 보안 테스트 성공한 시험용 배포를 먼저 제공. 운영 공개는 소유자의 실제 자격증명 설정과 최종 승인 이후.
+
+F. 최초 운영 절차
+1) 본인 계정 가입·이메일 인증 → UID 확인.
+2) 소유자 환경에서 bootstrap 스크립트 실행 → 관리자 로그인.
+3) 실제 사용자부서/협력사 계정 신청 → 관리자 승인 및 실제 역할/업체 배정.
+4) 프로젝트/입찰 생성 → 참여업체와 해당 업체의 승인 계정을 지정 → 초청 링크 전달.
+5) 서로 다른 브라우저/계정으로 제출 및 경쟁사 접근차단 확인.
+6) 사용중지·초청회수·비밀번호 재설정·담당자 변경 절차를 실행 예시로 제공.
+
+======================================================================
+10. 필수 검증 — 메뉴가 안 보이는 것만으로 통과시키지 말 것
+======================================================================
+테스트 계정: 관리자 A, 사용자부서 U, 협력사 A1/A2(같은 회사), 협력사 B1(다른 회사), 승인대기 P, 사용중지 D, 다른 tenant 관리자 X.
+기술 검증용 최소 2개 업체·2개 입찰·교차 tenant 데이터를 사용한다. 실제 회사 실적을 더미로 운영 데이터에 섞지 않는다.
+
+권한/유출 테스트:
+1) P/이메일 미인증/REJECTED/DISABLED: 자기 상태 외 업무 API·Storage 모두 거부.
+2) 가입 body에 role=ADMIN, approved=true, supplierCompanyId를 넣어도 권한 취득 불가.
+3) U: Pool 허용 필드 열람 가능, 입찰/견적/금액/파일/초청/승인 API 및 직접 URL 접근 모두 거부.
+4) A1: 본인에게 배정된 입찰과 자사 파일만 열람. tenderId/companyId/fileId/tenantId 변조로 B 자료·다른 프로젝트 접근 불가.
+5) A2: 같은 회사여도 해당 입찰 배정 전에는 접근 불가. 배정 후에만 자사 제출자료 열람.
+6) 협력사 응답 JSON/HTML/RSC/네트워크/캐시/로그에 경쟁사 이름·입찰 참여 수·제출 여부·파일명·금액이 전혀 없음.
+7) 일반 계정이 memberships, claims, grants, 파일 metadata를 직접 수정할 수 없음.
+8) 모든 Firestore client SDK/REST 직접 접근이 설계한 deny policy대로 차단됨. 서버 Admin SDK API도 별도 권한검사를 거침.
+9) Storage 직접 경로, 객체 목록, 오래된 download token, 비인증 요청으로 상대 파일을 읽을 수 없음.
+10) 초청 토큰 만료/회수/재사용/다른 이메일 claim/공유 링크 우회가 실패.
+11) 역할 변경·사용중지·회사 재연결 직후 기존 토큰/열린 탭/기존 grant/다운로드 경로 접근이 다음 요청부터 차단.
+12) ADMIN A도 다른 tenant X의 자료에 접근 불가.
+13) 마지막 관리자 강등 차단, 관리자 생성 권한 없는 관리자의 ADMIN 임명 차단.
+14) cookie 방식이면 CSRF, 모든 mutation의 validation/mass assignment, XSS/파일형식 공격을 검증.
+
+입찰/파일/업무 테스트:
+15) 임시 저장 → 작성 중. 생성 완료 → 진행 중. 첫 실제 제출 → 접수 중. 마감 → 제출 불가.
+16) 기기 시간을 바꿔도 마감 우회 불가. 업로드 중 마감, finalize 재시도, 중복 클릭, 동시 업체 제출, 마감 수정과 접수 충돌을 테스트.
+17) 제출한 입찰 수정 시 지정 문구, 기존 제출·파일·접수시각 보존, 공개 입찰이 DRAFT로 되돌아가지 않음.
+18) 파일 업로드 실패/검사실패/DB실패에서 거짓 성공 안내 없음. 제출 버전 불변, orphan 정리, 중복 접수 방지.
+19) 공란/미대상 저장 후 재조회와 달력 이벤트 삭제, 상속/별도설정 보존.
+20) 유럽/호주/미국 DST 경계, 현지일자와 관리자 달력일자 차이 확인.
+21) 프로젝트/입찰/Pool 검색 및 상태필터가 한영 모두 작동.
+22) 호주 별칭 표준화, 호주 외 본사의 호주 수행업체 검색, 세계 지도/미국 주 지도/커버리지 등록 연동.
+23) 모바일·좁은 화면에서 날짜 입력/시간대/업체 체크박스가 겹치거나 잘리지 않음.
+24) 일반 크기 및 Vercel 본문 제한을 넘는 허용 파일의 실제 업로드/다운로드 성공.
+25) 개발 데이터/권한전환 도구/테스트 계정/관리자 secret이 운영 bundle에 없음.
+
+Emulator Rules 테스트 + API 인가 통합 테스트 + Playwright E2E를 분리한다. Emulator만으로 확인되지 않는 실제 IAM/CORS/Auth 이메일/파일검사/Storage 토큰 동작은 시험용 Firebase·Vercel에서 검증한다. 실행하지 못한 테스트를 통과했다고 쓰지 않는다.
+
+======================================================================
+11. 단계별 구현과 납품
+======================================================================
+1단계: 원본 기능 대응표, 권한표, 데이터/파일 흐름, 보안 경계, 테스트 계획.
+2단계: 실제 Auth, 승인대기, 관리자 승인/권한배정, bootstrap, 서버 인가, 기본 deny Rules. 역할 간 차단 테스트부터 통과.
+3단계: 프로젝트·입찰·일정·상태·Pool·지도 기능 이관. 한영/레이아웃 회귀 확인.
+4단계: 실제 초청·Storage 업로드·서버 접수·업체별 다운로드·기록·사용중지 흐름.
+5단계: 시험환경 E2E, 운영자 설정 문서, 환경변수/배포/복구 안내, 최종 인수 목록.
+
+각 단계에서 실제 파일을 구현하고 검증하며 다음 단계로 진행하라. 외부 계정 설정이 필요한 지점만 구체적으로 안내한다. 계획서만 남기고 종료하지 말고, 테스트 없이 UI 완성을 운영 가능 완료로 보고하지 않는다.
+
+필수 산출물:
+- 실행 가능한 TypeScript 웹 앱과 server-only 데이터/권한 계층.
+- firestore.rules, storage.rules, firestore.indexes.json, firebase.json, Emulator 설정.
+- .env.example, lockfile, 개발/시험용 seed, 운영에서는 실행 거부하는 seed 안전장치.
+- 최초 관리자 bootstrap, 역할 정지/회수, 재시도/복구 스크립트.
+- 보안 및 업무 테스트 코드와 실제 실행 결과.
+- docs/FEATURE_PARITY.md, docs/ARCHITECTURE.md, docs/PERMISSIONS.md.
+- docs/SETUP_KO.md: Firebase/Vercel 설정, 소유자 확인, 관리자 계정 생성.
+- docs/ADMIN_GUIDE_KO.md: 가입 승인·역할 배정·업체 연결·입찰 사용자 배정·초청 회수·마감/자료 관리.
+- docs/TEST_REPORT.md: 실행한 항목·결과·미실행 항목·재현 절차.
+- docs/OPERATIONS.md: 백업·복구·감사·비용·파일 보관·키 회전·장애 대응.
+
+최종 보고는 구현 완료 / 테스트 결과 / 미구현·외부 설정 필요 / 보안상 한계 / 다음 작업을 구분한다. 로컬 성공, 시험용 배포 성공, 운영용 배포 승인·완료를 구분한다.
+권한, 서버 마감, 경쟁사 파일 격리, 비공개 Storage가 미완성이면 실제 사용 가능한 SaaS라고 부르지 않는다.
+
+======================================================================
+12. 공식 문서 확인 기준
+======================================================================
+아래는 2026-11-16 설계 검토 시 참고한 공식 문서다. 구현 시 다시 확인하고 실제 선택한 구조의 제한을 기록하라. 아래 구현 요구는 이 프로젝트를 위한 설계 제안이며 특정 문서의 예제 코드를 그대로 복사한 것이 아니다.
+
+Firebase Custom Claims:
+https://firebase.google.com/docs/auth/admin/custom-claims
+Firebase 서버 session cookie 및 폐기:
+https://firebase.google.com/docs/auth/admin/manage-cookies
+Firestore Rules 조건 및 서버 SDK 우회:
+https://firebase.google.com/docs/firestore/security/rules-conditions
+Firestore 쿼리와 Rules:
+https://firebase.google.com/docs/firestore/security/rules-query
+Storage Rules의 Firestore 참조 및 평가 제한:
+https://firebase.google.com/docs/storage/security/rules-conditions
+인증된 Storage SDK 파일 다운로드:
+https://firebase.google.com/docs/storage/web/download-files
+Cloud Storage 요금제 요구사항:
+https://firebase.google.com/docs/storage/faqs-storage-changes-announced-sept-2024
+Vercel Functions 제한:
+https://vercel.com/docs/functions/limitations
+Vercel 환경 분리:
+https://vercel.com/docs/deployments/environments
+
+[작업 시작]
+이제 원본 index.html을 읽어 현재 구현과 위 요구사항의 차이를 요약하고, 1단계 산출물을 작성한 뒤 2단계 구현을 시작하라. 기존 프로토타입의 우회 가능한 권한 처리를 실제 인증·서버 인가로 대체하는 작업을 최우선으로 진행하라.
