@@ -71,3 +71,26 @@ export function getFirebaseClientStorage(): FirebaseStorage {
   emulatorsConnected = true;
   return storage;
 }
+
+/**
+ * Storage only attaches an ID token when Auth is initialized and its persisted user has been restored,
+ * so callers must use this before client uploads. `expectedUid` is the uid the server embedded in the
+ * staging path; a different signed-in Firebase user would be rejected by the Storage rules anyway.
+ */
+export async function getAuthenticatedStorage(expectedUid?: string): Promise<FirebaseStorage> {
+  const auth = getFirebaseClientAuth();
+  await auth.authStateReady();
+  const user = auth.currentUser;
+  if (!user || (expectedUid && user.uid !== expectedUid)) {
+    throw Object.assign(new Error('Client sign-in does not match the server session.'), {
+      code: 'storage/unauthenticated',
+    });
+  }
+  await user.getIdToken();
+  return getFirebaseClientStorage();
+}
+
+/** The uploader uid segment of a server-issued staging path (`staging/{tenant}/{tender}/{scope}/{uid}/…`). */
+export function stagingPathUid(stagingPath: string): string | undefined {
+  return stagingPath.split('/')[4];
+}

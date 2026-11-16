@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ref, uploadBytesResumable } from 'firebase/storage';
-import { getFirebaseClientStorage } from '@/lib/firebase/client';
+import { getAuthenticatedStorage, stagingPathUid } from '@/lib/firebase/client';
 import { apiFetch } from '@/lib/client/api';
 import {
   computeScheduleSources,
@@ -337,7 +337,6 @@ export function AdminTendersClient({
   const handleRfpUpload = async (files: File[]) => {
     if (!files.length || !detailData) return;
     const tenderId = detailData.tender.id;
-    const storage = getFirebaseClientStorage();
     const intentIds: string[] = [];
 
     try {
@@ -355,6 +354,7 @@ export function AdminTendersClient({
           }),
         });
 
+        const storage = await getAuthenticatedStorage(stagingPathUid(intent.stagingPath));
         await new Promise<void>((resolve, reject) => {
           const task = uploadBytesResumable(ref(storage, intent.stagingPath), file);
           task.on(

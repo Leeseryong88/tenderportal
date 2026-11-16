@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ref, uploadBytesResumable } from 'firebase/storage';
-import { getFirebaseClientStorage } from '@/lib/firebase/client';
+import { getAuthenticatedStorage, stagingPathUid } from '@/lib/firebase/client';
 import { apiFetch } from '@/lib/client/api';
 import { TENDER_MILESTONES } from '@/lib/domain/schedule';
 import { formatDateTimeInZone } from '@/lib/domain/timezone';
@@ -103,7 +103,6 @@ export function SupplierTenderDetailClient({
     setProgressText('');
 
     try {
-      const storage = getFirebaseClientStorage();
       const intentIds: string[] = [];
 
       for (let i = 0; i < selectedFiles.length; i++) {
@@ -124,6 +123,7 @@ export function SupplierTenderDetailClient({
           }),
         });
 
+        const storage = await getAuthenticatedStorage(stagingPathUid(intent.stagingPath));
         await new Promise<void>((resolve, reject) => {
           const uploadTask = uploadBytesResumable(ref(storage, intent.stagingPath), file);
           uploadTask.on(
