@@ -20,13 +20,13 @@ const ALPHA3_TO_ALPHA2: Record<string, string> = {
   MNE: 'ME', MNG: 'MN', MOZ: 'MZ', MRT: 'MR', MWI: 'MW', MYS: 'MY', NAM: 'NA', NCL: 'NC',
   NER: 'NE', NGA: 'NG', NIC: 'NI', NLD: 'NL', NOR: 'NO', NPL: 'NP', NZL: 'NZ', OMN: 'OM',
   PAK: 'PK', PAN: 'PA', PER: 'PE', PHL: 'PH', PNG: 'PG', POL: 'PL', PRI: 'PR', PRK: 'KP',
-  PRT: 'PT', PRY: 'PY', PSE: 'PS', QAT: 'QA', ROU: 'RO', RUS: 'RU', RWA: 'RW', SAH: 'EH',
-  SAU: 'SA', SDN: 'SD', SEN: 'SN', SGP: 'SG', SLB: 'SB', SLE: 'SL', SLV: 'SV', SOM: 'SO',
+  PRT: 'PT', PRY: 'PY', PSE: 'PS', PSX: 'PS', QAT: 'QA', ROU: 'RO', RUS: 'RU', RWA: 'RW', SAH: 'EH',
+  SAU: 'SA', SDN: 'SD', SDS: 'SS', SEN: 'SN', SGP: 'SG', SLB: 'SB', SLE: 'SL', SLV: 'SV', SOM: 'SO',
   SRB: 'RS', SSD: 'SS', SUR: 'SR', SVK: 'SK', SVN: 'SI', SWE: 'SE', SWZ: 'SZ', SYR: 'SY',
   TCD: 'TD', TGO: 'TG', THA: 'TH', TJK: 'TJ', TKM: 'TM', TLS: 'TL', TTO: 'TT', TUN: 'TN',
   TUR: 'TR', TWN: 'TW', TZA: 'TZ', UGA: 'UG', UKR: 'UA', URY: 'UY', USA: 'US', UZB: 'UZ',
   VEN: 'VE', VNM: 'VN', VUT: 'VU', YEM: 'YE', ZAF: 'ZA', ZMB: 'ZM', ZWE: 'ZW',
-  KOS: 'XK', SOL: 'SO', CYN: 'CY',
+  KOS: 'XK', SOL: 'XS', CYN: 'XC',
 };
 
 const ALPHA2_TO_COUNTRY = new Map<string, { n: string; ko: string; iso3: string }>();
@@ -337,11 +337,15 @@ export function marketDisplayName(
 }
 
 export function getCountryAlpha2List(): Array<{ code: string; en: string; ko: string }> {
-  return WORLD_COUNTRY_PATHS.map((c) => ({
-    code: ALPHA3_TO_ALPHA2[c.iso] ?? c.iso.slice(0, 2),
-    en: c.n,
-    ko: c.ko,
-  })).sort((a, b) => a.en.localeCompare(b.en));
+  const seen = new Set<string>();
+  const out: Array<{ code: string; en: string; ko: string }> = [];
+  for (const c of WORLD_COUNTRY_PATHS) {
+    const code = ALPHA3_TO_ALPHA2[c.iso] ?? c.iso.slice(0, 2);
+    if (seen.has(code)) continue;
+    seen.add(code);
+    out.push({ code, en: c.n, ko: c.ko });
+  }
+  return out.sort((a, b) => a.en.localeCompare(b.en));
 }
 
 export function getUsStateList(): Array<{ code: string; abbr: string; en: string; ko: string }> {

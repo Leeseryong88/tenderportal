@@ -24,9 +24,9 @@ function mapFill(state: MapState): string {
   return '#e5e9e6';
 }
 
-function countryViewBox(countryName: string): string {
+function countryViewBox(countryName: string): { viewBox: string; width: number } {
   const f = WORLD_COUNTRY_PATHS.find((x) => x.n === countryName);
-  if (!f) return '0 0 1000 500';
+  if (!f) return { viewBox: '0 0 1000 500', width: 1000 };
   const [x0, y0, x1, y1] = f.b;
   let w = Math.max(x1 - x0, 8);
   let h = Math.max(y1 - y0, 6);
@@ -35,7 +35,10 @@ function countryViewBox(countryName: string): string {
   w = Math.max(w * 1.7, h * 3.0, 18);
   h = Math.max(h * 1.7, w / 2);
   w = Math.max(w, h * 2);
-  return `${(cx - w / 2).toFixed(1)} ${(cy - h / 2).toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`;
+  return {
+    viewBox: `${(cx - w / 2).toFixed(1)} ${(cy - h / 2).toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`,
+    width: w,
+  };
 }
 
 function aggregateState(items: Array<CoverageItem | null>): { state: MapState; count: number } {
@@ -170,7 +173,13 @@ export function SupplierCoverageMap({
     );
   }
 
-  const viewBox = activeCountryName ? countryViewBox(activeCountryName) : '0 0 1000 500';
+  const vb = activeCountryName
+    ? countryViewBox(activeCountryName)
+    : { viewBox: '0 0 1000 500', width: 1000 };
+  const scale = vb.width / 1000;
+  const labelFontSize = (compact ? 11 : 8.5) * scale;
+  const selectedFontSize = (compact ? 16 : 12) * scale;
+  const labelStrokeWidth = 2.2 * scale;
 
   return (
     <div>
@@ -178,7 +187,7 @@ export function SupplierCoverageMap({
         <svg
           className="geography-map world-geography"
           style={compact ? { maxHeight: 245, minWidth: 0 } : undefined}
-          viewBox={viewBox}
+          viewBox={vb.viewBox}
           role="img"
           aria-label={tr('suppliers.globalMapTitle')}
         >
@@ -198,7 +207,8 @@ export function SupplierCoverageMap({
                 d={f.d}
                 fill={mapFill(agg.state)}
                 stroke={selected ? '#244b3a' : '#fff'}
-                strokeWidth={selected ? 1.7 : 0.7}
+                strokeWidth={(selected ? 1.8 : 0.8) * scale}
+                vectorEffect="non-scaling-stroke"
                 tabIndex={onSelectCountry ? 0 : undefined}
                 role={onSelectCountry ? 'button' : undefined}
                 aria-label={`${label}: ${agg.count}`}
@@ -225,6 +235,11 @@ export function SupplierCoverageMap({
               x={f.x}
               y={f.y}
               textAnchor="middle"
+              dominantBaseline="central"
+              style={{
+                fontSize: `${labelFontSize}px`,
+                strokeWidth: `${labelStrokeWidth}px`,
+              }}
             >
               {lang === 'ko' ? f.ko : f.n}
             </text>
@@ -240,6 +255,11 @@ export function SupplierCoverageMap({
                   x={f.x}
                   y={f.y}
                   textAnchor="middle"
+                  dominantBaseline="central"
+                  style={{
+                    fontSize: `${selectedFontSize}px`,
+                    strokeWidth: `${labelStrokeWidth}px`,
+                  }}
                 >
                   {lang === 'ko' ? f.ko : f.n}
                 </text>

@@ -91,6 +91,7 @@ export function SupplierPoolClient({
   const [sCoverage, setSCoverage] = useState<
     Array<{ market: string; deliveryMode: DeliveryMode }>
   >([]);
+  const [previewFocusIdx, setPreviewFocusIdx] = useState(0);
   const [saving, setSaving] = useState(false);
 
   const loadSuppliers = useCallback(async () => {
@@ -222,6 +223,7 @@ export function SupplierPoolClient({
     setSLicenseExpiry('');
     setSContacts([{ country: 'South Korea', city: '', name: '', email: '', phone: '' }]);
     setSCoverage([{ market: 'South Korea', deliveryMode: 'DIRECT' }]);
+    setPreviewFocusIdx(0);
     setShowEditor(true);
   };
 
@@ -255,6 +257,7 @@ export function SupplierPoolClient({
         deliveryMode: c.deliveryMode,
       }))
     );
+    setPreviewFocusIdx(0);
     setShowEditor(true);
   };
 
@@ -305,8 +308,9 @@ export function SupplierPoolClient({
     [sCoverage]
   );
 
-  const previewFocusCountry = previewCoverage[0]?.countryCode || 'ALL';
-  const previewFocusSub = previewCoverage[0]?.subdivisionCode || 'ALL';
+  const previewFocusedItem = previewCoverage[previewFocusIdx] ?? previewCoverage[0];
+  const previewFocusCountry = previewFocusedItem?.countryCode || 'ALL';
+  const previewFocusSub = previewFocusedItem?.subdivisionCode || 'ALL';
 
   return (
     <PortalShell
@@ -861,12 +865,12 @@ export function SupplierPoolClient({
                   <button
                     type="button"
                     className="btn small"
-                    onClick={() =>
-                      setSCoverage((prev) => [
-                        ...prev,
-                        { market: 'South Korea', deliveryMode: 'DIRECT' },
-                      ])
-                    }
+                    onClick={() => {
+                      setSCoverage((prev) => {
+                        setPreviewFocusIdx(prev.length);
+                        return [...prev, { market: 'South Korea', deliveryMode: 'DIRECT' }];
+                      });
+                    }}
                   >
                     ＋ {tr('suppliers.addCoverage')}
                   </button>
@@ -878,6 +882,7 @@ export function SupplierPoolClient({
                       value={row.market}
                       onChange={(e) => {
                         const val = e.target.value;
+                        setPreviewFocusIdx(idx);
                         setSCoverage((prev) =>
                           prev.map((r, i) => (i === idx ? { ...r, market: val } : r))
                         );
