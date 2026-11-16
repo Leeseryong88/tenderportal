@@ -4,8 +4,6 @@ import React from 'react';
 import { useLanguage } from '@/components/providers/LanguageProvider';
 import type { I18nKey } from '@/i18n/en';
 
-type PillKind = 'scan';
-
 const GREEN = new Set([
   'OPEN',
   'Open',
@@ -45,32 +43,18 @@ const KEY_MAP: Record<string, I18nKey> = {
   UNAVAILABLE: 'suppliers.delivery.UNAVAILABLE',
   NOT_SUBMITTED: 'supplierPortal.ownState.NOT_SUBMITTED',
   SUBMITTED: 'supplierPortal.ownState.SUBMITTED',
-  CLEAN: 'scan.CLEAN',
-  INFECTED: 'scan.INFECTED',
-  FAILED: 'scan.FAILED',
 };
 
 const VALUE_PREFIXES = ['projectStatus', 'companyStatus', 'nda', 'license', 'priority'];
 
-export function StatusPill({
-  status,
-  labelOverride,
-  kind,
-}: {
-  status: string;
-  labelOverride?: string;
-  /** Disambiguates codes shared across domains, e.g. scan `PENDING` vs account `PENDING`. */
-  kind?: PillKind;
-}) {
+export function StatusPill({ status, labelOverride }: { status: string; labelOverride?: string }) {
   const { tr, trv } = useLanguage();
 
   const tone = GREEN.has(status) ? 'green' : BLUE.has(status) ? 'blue' : RED.has(status) ? 'red' : 'amber';
 
   let text = labelOverride || '';
   if (!text) {
-    if (kind === 'scan') {
-      text = trv('scan', status);
-    } else if (KEY_MAP[status]) {
+    if (KEY_MAP[status]) {
       text = tr(KEY_MAP[status]);
     } else {
       text = status;

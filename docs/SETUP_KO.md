@@ -81,9 +81,6 @@
 | `FIREBASE_STORAGE_BUCKET` | Firebase Storage | **예** | `demo...` | Staging 버킷 | Prod 버킷 |
 | `APP_BASE_URL` | 서비스 기본 URL | **예** | `http://localhost:3000` | Staging URL | Prod URL |
 | `ALLOWED_ORIGINS` | 허용 Origin 목록(콤마) | **예** | `http://localhost:3000` | Staging URL | Prod 도메인들 |
-| `MALWARE_SCANNER_MODE` | 파일 검사 방식 | **예** | `local_signature_dev` | `webhook` | `webhook` |
-| `MALWARE_SCANNER_WEBHOOK_SECRET` | 검사 워커 비밀키 | **예** | 빈 값 | Staging secret | Prod secret |
-
 ---
 
 ## E. Vercel 연결 및 배포

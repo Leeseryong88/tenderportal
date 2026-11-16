@@ -453,7 +453,6 @@ export const ko: Record<I18nKey, string> = {
   'error.DISALLOWED_FILE_TYPE': '허용되지 않는 파일 형식입니다.',
   'error.INVALID_FILE_CONTENT': '파일 내용이 확장자와 일치하지 않습니다.',
   'error.TOO_MANY_FILES': '한 번에 제출할 수 있는 파일 수를 초과했습니다.',
-  'error.FILE_SCAN_NOT_CLEAN': '보안 검사가 완료되기 전에는 다운로드할 수 없습니다.',
   'error.REAUTH_REQUIRED': '비밀번호를 다시 확인해 주세요.',
   'error.REAUTH_EXPIRED': '비밀번호 확인 시간이 지났습니다. 다시 시도하세요.',
   'error.REAUTH_INVALID': '비밀번호 확인에 실패했습니다. 다시 시도하세요.',

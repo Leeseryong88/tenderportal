@@ -217,9 +217,9 @@ describe.skipIf(!hasFirestoreEmulator || !hasStorageEmulator)(
       // User department cannot read protected files
       await assertFails(getBytes(ref(deptU, 'protected/iicombined/tnd_open/rfp/rfp_clean/v1')));
 
-      // Granted A1 can read CLEAN published RFP, but NOT PENDING scan RFP
+      // Granted A1 can read published RFP regardless of legacy scanStatus metadata
       await assertSucceeds(getBytes(ref(supA1, 'protected/iicombined/tnd_open/rfp/rfp_clean/v1')));
-      await assertFails(getBytes(ref(supA1, 'protected/iicombined/tnd_open/rfp/rfp_pending/v1')));
+      await assertSucceeds(getBytes(ref(supA1, 'protected/iicombined/tnd_open/rfp/rfp_pending/v1')));
 
       // Direct client write to protected path is denied
       await assertFails(

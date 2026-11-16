@@ -451,7 +451,6 @@ export const en = {
   'error.DISALLOWED_FILE_TYPE': 'This file type is not allowed.',
   'error.INVALID_FILE_CONTENT': 'The file content does not match its extension.',
   'error.TOO_MANY_FILES': 'Too many files in one submission.',
-  'error.FILE_SCAN_NOT_CLEAN': 'This file cannot be downloaded until its security scan passes.',
   'error.REAUTH_REQUIRED': 'Please confirm your password again.',
   'error.REAUTH_EXPIRED': 'Password confirmation expired. Please try again.',
   'error.REAUTH_INVALID': 'Password confirmation failed. Please try again.',

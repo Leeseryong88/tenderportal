@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { getAdminDb, getAdminStorage } from '@/lib/firebase/admin';
 import { AuthzError, authorize } from '@/lib/server/authz';
 import {
-  evaluateScannerPolicy,
+  UNSCANNED_FILE_VERDICT,
   extractExtension,
   isAllowedExtension,
   sha256Hex,
@@ -87,7 +87,7 @@ export async function POST(
         return jsonError('INVALID_FILE_CONTENT', `File validation failed: ${magic.reason}`, 400);
       }
 
-      const scan = evaluateScannerPolicy(buf);
+      const scan = UNSCANNED_FILE_VERDICT;
       const sha256 = sha256Hex(buf);
       const versionId = 'v1';
       const scopeDir = parsed.data.publishedToSuppliers ? 'rfp' : 'rfp-internal';

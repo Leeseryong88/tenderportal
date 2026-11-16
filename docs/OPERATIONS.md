@@ -5,13 +5,14 @@
 - **Cloud Storage**: 비공개 버킷에 Object Versioning을 활성화하여 실수 삭제/변조 시 이전 세대 복구가 가능하도록 구성합니다.
 - **파일 회수 한계**: 이미 다운로드 권한이 있던 사용자가 본인 기기에 내려받아 저장한 파일은 서버에서 원격 삭제/회수할 수 없습니다. 접근 회수는 향후 열람·신규 다운로드를 차단합니다.
 
-## 2. 악성파일 검사 및 Production 전환 조건
-- 개발/Emulator 환경에서는 `MALWARE_SCANNER_MODE=local_signature_dev`로 확장자·매직바이트·EICAR 시그니처 검사를 즉시 수행해 `CLEAN` 처리합니다.
-- **운영(`NODE_ENV=production`)에서는 `local_signature_dev`가 차단**되며, `PENDING` 상태로 기록됩니다. 실제 운영 개시 전 Cloud Run + ClamAV 등 외부 스캐너 워커를 연결하고 `/api/internal/malware-scan` 웹훅(`MALWARE_SCANNER_WEBHOOK_SECRET`)으로 `CLEAN`/`INFECTED` 판정을 전달하도록 구성해야 합니다.
+## 2. 파일 검증 (악성코드 검사 미사용)
+- 업로드 파일은 허용 확장자·위험 확장자 차단·매직바이트·크기 검사만 수행하며, 별도 악성코드 검사는 하지 않습니다.
+- 검증을 통과한 파일은 즉시 다운로드 가능하며, 접근 권한(관리자 / 같은 회사의 권한 받은 공급사) 검사는 그대로 적용됩니다.
+- 기존 데이터의 `scanStatus` 필드는 호환을 위해 남아 있지만 다운로드 여부에 영향을 주지 않습니다.
 
 ## 3. 감사로그 보관 및 모니터링
 - `/tenants/{tenantId}/auditLogs`는 서버 전용으로만 기록되며 UI에서 수정·삭제할 수 없습니다.
-- 로그인 실패 급증, `403` 인가 거부, 역할 변경, 파일 스캔 `INFECTED` 이벤트는 Cloud Logging / Vercel Log Drains와 연동해 알림을 설정합니다.
+- 로그인 실패 급증, `403` 인가 거부, 역할 변경 이벤트는 Cloud Logging / Vercel Log Drains와 연동해 알림을 설정합니다.
 
 ## 4. 키 회전 및 긴급 사용자 차단
 - **Service Account 키 회전**: 새 키를 GCP IAM에서 발급 → Vercel 환경변수 업데이트 및 재배포 → 기존 키 폐기. 가능하면 Vercel OIDC / Workload Identity Federation 사용을 권장합니다.

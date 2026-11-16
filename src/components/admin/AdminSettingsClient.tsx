@@ -22,7 +22,6 @@ export function AdminSettingsClient({
 
   const [settings, setSettings] = useState<TenantSettings | null>(null);
   const [readiness, setReadiness] = useState<{
-    malwareScannerMode: string;
     appCheckRequired: boolean;
     emulatorMode: boolean;
   } | null>(null);
@@ -33,7 +32,6 @@ export function AdminSettingsClient({
     void apiFetch<{
       settings: TenantSettings;
       runtimeReadiness: {
-        malwareScannerMode: string;
         appCheckRequired: boolean;
         emulatorMode: boolean;
       };
@@ -92,10 +90,10 @@ export function AdminSettingsClient({
       </div>
 
       {readiness && (
-        <div className={`notice ${readiness.malwareScannerMode === 'local_signature_dev' ? 'warn' : ''}`}>
+        <div className="notice">
           <b>{tr('settings.readiness')}</b>
           <br />
-          Malware scanner: <code>{readiness.malwareScannerMode}</code> · App Check:{' '}
+          App Check:{' '}
           <code>{String(readiness.appCheckRequired)}</code> · Emulator:{' '}
           <code>{String(readiness.emulatorMode)}</code>
           <br />

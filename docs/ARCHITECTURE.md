@@ -106,8 +106,8 @@
    - 검증된 객체를 `protected/{tenantId}/{tenderId}/submissions/{companyId}/{versionId}/{fileId}`로 서버 복사 후 `staging` 객체를 정리한다.
    - Firestore Transaction에서 `now < deadlineAt`, `access/{uid}.enabled`, `idempotencyKey` 중복 여부를 최종 확인한 뒤 불변 `versions/{versionId}`와 접수번호(`RCP-...`), `acceptedAt`, `receivedCompanyCount`를 원자적으로 기록한다.
    - 마감 전에 업로드를 시작했더라도 `finalize` 시점 서버 시각이 `deadlineAt` 이후면 접수를 거부한다.
-4. **비동기 악성코드 검사**:
-   - 파일 메타데이터에 `scanStatus: 'PENDING' | 'CLEAN' | 'INFECTED' | 'FAILED'`를 기록한다.
-   - 로컬/개발 환경에서는 명시적 설정(`MALWARE_SCANNER_MODE=mock` 또는 `disabled`) 상태를 기록하며, 운영 전환 전 실제 Cloud Run / ClamAV 등 검사 워커 연결이 필요함을 `/admin/settings`와 문서에 명시한다. `PENDING` 또는 `INFECTED`/`FAILED` 파일은 다운로드를 차단한다(개발/시험 시 설정에 따라 명시적 안내).
+4. **악성코드 검사 미사용**:
+   - 별도 악성코드 검사는 하지 않으며, 확장자·매직바이트 검증을 통과한 파일은 `scanStatus: 'CLEAN'`으로 기록되어 즉시 다운로드 가능하다.
+   - `scanStatus` 필드는 기존 데이터 호환용으로만 남아 있으며 다운로드 권한 판단에 쓰이지 않는다.
 5. **다운로드**:
    - 클라이언트 요청 시 `/api/files/[fileId]/download`에서 매번 8단계 인가를 수행하고 `Content-Disposition: attachment; filename*=UTF-8''...` 및 `X-Content-Type-Options: nosniff`로 안전하게 제공하거나, Storage SDK 인증 읽기를 사용한다. `getDownloadURL` 장기 토큰 및 공개 버킷은 사용하지 않는다.

@@ -372,10 +372,8 @@ export function SupplierTenderDetailClient({
                       </div>
                       {ver.files.map((f) => (
                         <div key={f.fileId} className="detail-row">
-                          <span>
-                            {f.originalName} <StatusPill status={f.scanStatus} kind="scan" />
-                          </span>
-                          <DownloadButton fileId={f.fileId} fileName={f.originalName} scanStatus={f.scanStatus} />
+                          <span>{f.originalName}</span>
+                          <DownloadButton fileId={f.fileId} fileName={f.originalName} />
                         </div>
                       ))}
                     </div>

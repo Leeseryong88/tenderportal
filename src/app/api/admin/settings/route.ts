@@ -15,7 +15,6 @@ export async function GET() {
     return jsonPrivate({
       settings,
       runtimeReadiness: {
-        malwareScannerMode: process.env.MALWARE_SCANNER_MODE || 'webhook',
         appCheckRequired: process.env.REQUIRE_APP_CHECK === 'true',
         emulatorMode: Boolean(process.env.FIRESTORE_EMULATOR_HOST),
       },

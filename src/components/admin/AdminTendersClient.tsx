@@ -1050,7 +1050,6 @@ export function AdminTendersClient({
                     <div key={f.id} className="detail-row">
                       <span>
                         {f.originalName}{' '}
-                        <StatusPill status={f.scanStatus} kind="scan" />{' '}
                         <StatusPill
                           status={f.publishedToSuppliers ? 'ACTIVE' : 'DRAFT'}
                           labelOverride={
@@ -1066,7 +1065,7 @@ export function AdminTendersClient({
                         >
                           {f.publishedToSuppliers ? tr('tenders.makeInternal') : tr('tenders.makePublished')}
                         </button>
-                        <DownloadButton fileId={f.id} fileName={f.originalName} scanStatus={f.scanStatus} />
+                        <DownloadButton fileId={f.id} fileName={f.originalName} />
                       </div>
                     </div>
                   ))
@@ -1278,10 +1277,8 @@ export function AdminTendersClient({
                 <div style={{ marginTop: 8 }}>
                   {ver.files.map((f) => (
                     <div key={f.fileId} className="detail-row">
-                      <span>
-                        {f.originalName} <StatusPill status={f.scanStatus} kind="scan" />
-                      </span>
-                      <DownloadButton fileId={f.fileId} fileName={f.originalName} scanStatus={f.scanStatus} />
+                      <span>{f.originalName}</span>
+                      <DownloadButton fileId={f.fileId} fileName={f.originalName} />
                     </div>
                   ))}
                 </div>

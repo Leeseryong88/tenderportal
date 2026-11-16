@@ -68,12 +68,11 @@ service firebase.storage {
         && isActiveMember(membershipDoc(), tenantId, 'ADMIN');
     }
 
-    // Published RFP protected objects: Admin or granted Supplier, CLEAN scan only.
+    // Published RFP protected objects: Admin or granted Supplier.
     match /protected/{tenantId}/{tenderId}/rfp/{fileId}/{versionId} {
       allow list, write: if false;
       allow get: if isSignedInVerified()
         && resource != null
-        && resource.metadata.scanStatus == 'CLEAN'
         && (
           isActiveMember(membershipDoc(), tenantId, 'ADMIN')
           || (
@@ -88,16 +87,14 @@ service firebase.storage {
       allow list, write: if false;
       allow get: if isSignedInVerified()
         && resource != null
-        && resource.metadata.scanStatus == 'CLEAN'
         && isActiveMember(membershipDoc(), tenantId, 'ADMIN');
     }
 
-    // Supplier submission protected objects: Admin or same-company granted Supplier, CLEAN scan only.
+    // Supplier submission protected objects: Admin or same-company granted Supplier.
     match /protected/{tenantId}/{tenderId}/submissions/{companyId}/{versionId}/{fileId} {
       allow list, write: if false;
       allow get: if isSignedInVerified()
         && resource != null
-        && resource.metadata.scanStatus == 'CLEAN'
         && (
           isActiveMember(membershipDoc(), tenantId, 'ADMIN')
           || (

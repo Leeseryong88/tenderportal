@@ -46,15 +46,6 @@ export async function GET(
       }
     }
 
-    // Block downloads of PENDING, INFECTED, or FAILED files
-    if (file.scanStatus !== 'CLEAN') {
-      return jsonError(
-        'FILE_SCAN_NOT_CLEAN',
-        `File download blocked (scan status: ${file.scanStatus}).`,
-        403
-      );
-    }
-
     const bucket = getAdminStorage().bucket();
     const obj = bucket.file(file.storagePath);
     const [exists] = await obj.exists();

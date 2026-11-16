@@ -4,7 +4,7 @@ import { getAdminDb, getAdminStorage } from '@/lib/firebase/admin';
 import { AuthzError, authorize } from '@/lib/server/authz';
 import { computeTenderStatus } from '@/lib/domain/schedule';
 import {
-  evaluateScannerPolicy,
+  UNSCANNED_FILE_VERDICT,
   extractExtension,
   isAllowedExtension,
   sha256Hex,
@@ -152,7 +152,7 @@ export async function POST(
           );
         }
 
-        const scan = evaluateScannerPolicy(buf);
+        const scan = UNSCANNED_FILE_VERDICT;
         const sha256 = sha256Hex(buf);
         const protectedPath = `protected/${tenantId}/${tenderId}/submissions/${companyId}/${versionId}/${intent.fileId}`;
         const destFile = bucket.file(protectedPath);

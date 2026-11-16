@@ -62,5 +62,5 @@
 4. 요청 대상 리소스의 `tenantId` 일치 검증
 5. `action`에 필요한 역할(`ADMIN` / `USER_DEPARTMENT` / `SUPPLIER`) 및 `canManageAdmins` 검증
 6. `SUPPLIER`인 경우 유효한 `access/{uid}` (`enabled === true`, `companyId === membership.supplierCompanyId`) 및 `participants/{companyId}` 참가 관계 검증
-7. 파일/제출물 접근 시 `tenantId`, `tenderId`, `companyId`, `scanStatus`, `publishedToSuppliers` 소유·공개 범위 검증
+7. 파일/제출물 접근 시 `tenantId`, `tenderId`, `companyId`, `publishedToSuppliers` 소유·공개 범위 검증
 8. Allowlist DTO 응답 (`Cache-Control: private, no-store`) 및 감사로그 기록

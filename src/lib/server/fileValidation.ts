@@ -24,9 +24,6 @@ const BLOCKED_EXTENSIONS = new Set([
   'aspx',
 ]);
 
-const EICAR_SIGNATURE =
-  'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*';
-
 export function extractExtension(filename: string): string {
   const base = String(filename || '').trim().split(/[\\/]/).pop() || '';
   const idx = base.lastIndexOf('.');
@@ -128,32 +125,11 @@ export function sha256Hex(buf: Buffer): string {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
-export function evaluateScannerPolicy(buf: Buffer): {
-  scanStatus: 'CLEAN' | 'PENDING' | 'INFECTED';
-  scanDetail: string;
-} {
-  // Always detect EICAR signature immediately
-  if (buf.includes(Buffer.from(EICAR_SIGNATURE, 'ascii'))) {
-    return { scanStatus: 'INFECTED', scanDetail: 'EICAR test signature detected' };
-  }
-
-  const mode = process.env.MALWARE_SCANNER_MODE || 'webhook';
-  if (mode === 'local_signature_dev') {
-    if (process.env.NODE_ENV === 'production') {
-      // Production MUST NOT trust local_signature_dev mock scanning!
-      return {
-        scanStatus: 'PENDING',
-        scanDetail: 'Production requires external malware scanner webhook',
-      };
-    }
-    return {
-      scanStatus: 'CLEAN',
-      scanDetail: 'Verified by local_signature_dev (non-production)',
-    };
-  }
-
-  return {
-    scanStatus: 'PENDING',
-    scanDetail: 'Awaiting external malware scanner verdict',
-  };
-}
+/**
+ * Malware scanning is intentionally disabled: files that pass the extension and magic-byte checks are
+ * stored as immediately downloadable. `scanStatus` is kept on records for compatibility with older data.
+ */
+export const UNSCANNED_FILE_VERDICT = {
+  scanStatus: 'CLEAN',
+  scanDetail: 'Malware scanning disabled',
+} as const;

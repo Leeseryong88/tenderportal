@@ -19,7 +19,6 @@ import {
 import {
   isAllowedExtension,
   validateFileMagicBytes,
-  evaluateScannerPolicy,
 } from '@/lib/server/fileValidation';
 import { registerRequestSchema } from '@/lib/validation/schemas';
 
@@ -174,7 +173,7 @@ describe('Security validation & file content checks', () => {
     expect(adminRole.success).toBe(false);
   });
 
-  it('blocks HTML/SVG masquerading and verifies magic bytes + EICAR detection', () => {
+  it('blocks HTML/SVG masquerading and verifies magic bytes', () => {
     expect(isAllowedExtension('payload.svg', ['pdf', 'png'])).toBe(false);
     expect(isAllowedExtension('payload.html', ['pdf', 'png'])).toBe(false);
     expect(isAllowedExtension('quote.pdf', ['pdf', 'png'])).toBe(true);
@@ -184,8 +183,5 @@ describe('Security validation & file content checks', () => {
 
     const validPdf = Buffer.from('%PDF-1.7\n1 0 obj\n', 'utf8');
     expect(validateFileMagicBytes('pdf', validPdf).ok).toBe(true);
-
-    const eicar = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*', 'ascii');
-    expect(evaluateScannerPolicy(eicar).scanStatus).toBe('INFECTED');
   });
 });
