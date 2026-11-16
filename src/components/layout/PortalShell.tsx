@@ -105,23 +105,20 @@ export function PortalShell({
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="profile">
+          <div className="profile" title={email ? `${displayName} · ${email}` : displayName}>
             <div className="avatar">{initial}</div>
-            <div style={{ minWidth: 0 }}>
-              <b
-                title={displayName}
-                style={{ fontSize: 13, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-              >
-                {displayName}
-              </b>
+            <div className="profile-text">
+              <b>{displayName}</b>
+              {email && email !== displayName && <span className="profile-email">{email}</span>}
               <small>{tr(roleLabelKey)}</small>
             </div>
           </div>
           <button
             type="button"
-            className="btn small"
+            className="btn small logout-btn"
             onClick={handleLogout}
             data-testid="logout-btn"
+            title={tr('app.logout')}
           >
             <span className="ico">⎋</span>
             <span>{tr('app.logout')}</span>

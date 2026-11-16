@@ -103,7 +103,7 @@ async function main() {
     targetId: user.uid,
     beforeSummary: existingSnap.exists ? (existingSnap.data() as Record<string, unknown>) : null,
     afterSummary: nextMembership as unknown as Record<string, unknown>,
-    reason: 'Operator CLI bootstrap',
+    reason: '운영자 CLI로 최초 관리자 지정',
   });
 
   console.log(

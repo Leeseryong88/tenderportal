@@ -128,14 +128,53 @@ a {
   border-top: 1px solid var(--line);
   padding-top: 13px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
+  min-width: 0;
 }
 
 .profile {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 9px;
+  padding: 6px 4px;
+  min-width: 0;
+}
+
+.profile-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.profile-text b,
+.profile-text .profile-email {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-text b {
+  font-size: 13px;
+}
+
+.profile-text .profile-email {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.sidebar-bottom .logout-btn {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.sidebar-bottom .logout-btn span:not(.ico) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .avatar {
@@ -412,6 +451,26 @@ td .secondary,
 td.cell-wrap {
   white-space: normal;
   max-width: 300px;
+}
+
+td.audit-activity {
+  white-space: normal;
+  min-width: 280px;
+  max-width: 560px;
+  line-height: 1.5;
+}
+
+td.audit-activity b {
+  font-weight: 600;
+}
+
+.audit-details {
+  margin: 5px 0 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  display: grid;
+  gap: 2px;
 }
 
 td .primary-text {
@@ -1753,9 +1812,17 @@ td .primary-text {
   .workspace-label,
   .nav a span:not(.ico),
   .nav button span:not(.ico),
-  .profile div:not(.avatar),
-  .sidebar-bottom .btn span {
+  .profile-text,
+  .sidebar-bottom .btn span:not(.ico) {
     display: none;
+  }
+  .profile {
+    justify-content: center;
+    padding: 6px 0;
+  }
+  .sidebar-bottom .logout-btn {
+    padding-left: 0;
+    padding-right: 0;
   }
   .nav a,
   .nav button {

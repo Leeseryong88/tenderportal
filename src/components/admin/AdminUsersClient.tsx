@@ -41,7 +41,7 @@ export function AdminUsersClient({
   email: string;
   organizationName: string;
 }) {
-  const { lang, tr, trError } = useLanguage();
+  const { lang, tr, trv, trError } = useLanguage();
   const { showToast } = useToast();
 
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -102,7 +102,7 @@ export function AdminUsersClient({
             role: targetRole,
             supplierCompanyId: targetRole === 'SUPPLIER' ? targetCompanyId : null,
             canManageAdmins: targetRole === 'ADMIN' ? targetCanManageAdmins : false,
-            reason: reason.trim() || 'Approved by administrator',
+            reason: reason.trim() || tr('users.defaultApproveReason'),
           }),
         });
         showToast(lang === 'ko' ? '사용자 권한을 승인/반영했습니다.' : 'User approved/updated.');
@@ -112,7 +112,9 @@ export function AdminUsersClient({
           reauthToken: freshToken,
           body: JSON.stringify({
             status: pendingAction.nextStatus,
-            reason: reason.trim() || `Changed status to ${pendingAction.nextStatus}`,
+            reason:
+              reason.trim() ||
+              tr('users.defaultStatusReason', { status: trv('status', pendingAction.nextStatus) }),
           }),
         });
         showToast(lang === 'ko' ? '계정 상태를 변경했습니다.' : 'User status updated.');

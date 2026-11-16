@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/client/api';
+import { EMPTY_AUDIT_NAMES, formatAuditLog, type AuditNames } from '@/lib/audit/format';
 import { TENDER_MILESTONES } from '@/lib/domain/schedule';
 import { dateInTimeZone, formatDateTimeInZone } from '@/lib/domain/timezone';
 import { PortalShell } from '@/components/layout/PortalShell';
@@ -26,6 +27,7 @@ interface DashboardPayload {
   tenders: TenderAdminDTO[];
   tasks: DashboardTask[];
   recentAudit: AuditLogRecord[];
+  auditNames?: AuditNames;
 }
 
 interface AgendaEvent {
@@ -637,17 +639,25 @@ export function AdminDashboardClient({
               {(data?.recentAudit || []).length === 0 ? (
                 <div className="empty">{tr('common.noResults')}</div>
               ) : (
-                data!.recentAudit.slice(0, 5).map((log) => (
-                  <div key={log.id} className="activity-item">
-                    <div className="activity-icon">•</div>
-                    <div className="activity-text">
-                      <b>{log.action}</b> · {log.targetType} ({log.targetId})
-                      <small>
-                        {formatDateTimeInZone(log.createdAt, data!.displayTimeZone, lang)}
-                      </small>
+                data!.recentAudit.slice(0, 5).map((log) => {
+                  const view = formatAuditLog(
+                    log,
+                    data!.auditNames || EMPTY_AUDIT_NAMES,
+                    lang,
+                    data!.displayTimeZone
+                  );
+                  return (
+                    <div key={log.id} className="activity-item">
+                      <div className="activity-icon">•</div>
+                      <div className="activity-text">
+                        <b>{view.actor}</b> · {view.summary}
+                        <small>
+                          {formatDateTimeInZone(log.createdAt, data!.displayTimeZone, lang)}
+                        </small>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </section>

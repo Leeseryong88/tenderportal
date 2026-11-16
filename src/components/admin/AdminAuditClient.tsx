@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/client/api';
+import { EMPTY_AUDIT_NAMES, formatAuditLog, type AuditNames } from '@/lib/audit/format';
 import { formatDateTimeInZone } from '@/lib/domain/timezone';
 import { PortalShell } from '@/components/layout/PortalShell';
 import { useLanguage } from '@/components/providers/LanguageProvider';
@@ -22,24 +23,33 @@ export function AdminAuditClient({
   const { lang, tr, trError } = useLanguage();
   const { showToast } = useToast();
   const [logs, setLogs] = useState<AuditLogRecord[]>([]);
+  const [names, setNames] = useState<AuditNames>(EMPTY_AUDIT_NAMES);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
 
   useEffect(() => {
-    void apiFetch<{ logs: AuditLogRecord[] }>('/api/admin/audit')
-      .then((res) => setLogs(res.logs))
+    void apiFetch<{ logs: AuditLogRecord[]; names?: AuditNames }>('/api/admin/audit')
+      .then((res) => {
+        setLogs(res.logs);
+        setNames(res.names || EMPTY_AUDIT_NAMES);
+      })
       .catch((err) => showToast(trError(err), 'error'))
       .finally(() => setLoading(false));
   }, [showToast, trError]);
 
+  const rows = useMemo(
+    () => logs.map((log) => ({ log, view: formatAuditLog(log, names, lang, displayTimeZone) })),
+    [logs, names, lang, displayTimeZone]
+  );
+
   const q = query.trim().toLowerCase();
   const visible = q
-    ? logs.filter((log) =>
-        [log.action, log.actorUid, log.actorRole, log.targetType, log.targetId, log.reason]
+    ? rows.filter(({ log, view }) =>
+        [view.actor, view.actorRole, view.summary, ...view.details, view.reason, log.action]
           .filter(Boolean)
           .some((v) => String(v).toLowerCase().includes(q))
       )
-    : logs;
+    : rows;
 
   return (
     <PortalShell
@@ -79,28 +89,32 @@ export function AdminAuditClient({
                   <th>{tr('audit.colTime')}</th>
                   <th>{tr('audit.colActor')}</th>
                   <th>{tr('audit.colAction')}</th>
-                  <th>{tr('audit.colTarget')}</th>
                   <th>{tr('common.reason')}</th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((log) => (
+                {visible.map(({ log, view }) => (
                   <tr key={log.id}>
-                    <td>{formatDateTimeInZone(log.createdAt, displayTimeZone, lang)}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {formatDateTimeInZone(log.createdAt, displayTimeZone, lang)}
+                    </td>
                     <td className="cell-wrap">
                       <span className="primary-text" style={{ fontWeight: 500 }}>
-                        {log.actorUid}
+                        {view.actor}
                       </span>
-                      <span className="secondary">{log.actorRole}</span>
+                      <span className="secondary">{view.actorRole}</span>
                     </td>
-                    <td>
-                      <b>{log.action}</b>
+                    <td className="audit-activity" title={`${tr('audit.actionCode')}: ${log.action}`}>
+                      <b>{view.summary}</b>
+                      {view.details.length > 0 && (
+                        <ul className="audit-details">
+                          {view.details.map((d) => (
+                            <li key={d}>{d}</li>
+                          ))}
+                        </ul>
+                      )}
                     </td>
-                    <td className="cell-wrap">
-                      {log.targetType}
-                      <span className="secondary">{log.targetId}</span>
-                    </td>
-                    <td className="cell-wrap">{log.reason || '—'}</td>
+                    <td className="cell-wrap">{view.reason || '—'}</td>
                   </tr>
                 ))}
               </tbody>

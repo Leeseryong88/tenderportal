@@ -3,6 +3,7 @@ import { AuthzError, authorize } from '@/lib/server/authz';
 import { computeTenderStatus } from '@/lib/domain/schedule';
 import { dateInTimeZone } from '@/lib/domain/timezone';
 import { jsonError, jsonPrivate } from '@/lib/server/security';
+import { buildAuditNameIndex } from '@/lib/server/auditNames';
 import { getTenantSettings } from '@/lib/server/settings';
 import type {
   AuditLogRecord,
@@ -53,6 +54,7 @@ export async function GET() {
       .sort((a, b) => a.dateLocal.localeCompare(b.dateLocal));
 
     const recentAudit = auditSnap.docs.map((d) => d.data() as AuditLogRecord);
+    const auditNames = await buildAuditNameIndex(db, tenantId, recentAudit);
 
     const serverToday = dateInTimeZone(nowIso, settings.displayTimeZone || 'Asia/Seoul');
 
@@ -64,6 +66,7 @@ export async function GET() {
       tenders,
       tasks,
       recentAudit,
+      auditNames,
     });
   } catch (err) {
     if (err instanceof AuthzError) {
