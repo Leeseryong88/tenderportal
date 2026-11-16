@@ -509,7 +509,7 @@ export function SupplierPoolClient({
                       setFSubdivision('ALL');
                     }}
                   >
-                    World view
+                    {lang === 'ko' ? '전체 세계 지도' : 'World view'}
                   </button>
                 )}
               </div>
@@ -523,7 +523,7 @@ export function SupplierPoolClient({
               selectedCountryCode={fCountry}
               selectedSubdivisionCode={fSubdivision}
               onSelectCountry={(code) => {
-                setFCountry(code);
+                setFCountry((prev) => (prev === code ? 'ALL' : code));
                 setFSubdivision('ALL');
               }}
               onSelectSubdivision={(sub) => {

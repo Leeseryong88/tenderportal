@@ -28,15 +28,21 @@ function countryViewBox(countryName: string): { viewBox: string; width: number }
   const f = WORLD_COUNTRY_PATHS.find((x) => x.n === countryName);
   if (!f) return { viewBox: '0 0 1000 500', width: 1000 };
   const [x0, y0, x1, y1] = f.b;
-  let w = Math.max(x1 - x0, 8);
-  let h = Math.max(y1 - y0, 6);
+  const rawW = Math.max(x1 - x0, 8);
+  const rawH = Math.max(y1 - y0, 6);
   const cx = (x0 + x1) / 2;
   const cy = (y0 + y1) / 2;
-  w = Math.max(w * 1.7, h * 3.0, 18);
-  h = Math.max(h * 1.7, w / 2);
-  w = Math.max(w, h * 2);
+
+  // Keep a comfortable regional zoom (~3x-4x max) so neighboring countries stay visible
+  let w = Math.max(rawW * 2.2, rawH * 4.0, 260);
+  w = Math.min(w, 1000);
+  const h = w / 2;
+
+  const vx = Math.max(0, Math.min(1000 - w, cx - w / 2));
+  const vy = Math.max(0, Math.min(500 - h, cy - h / 2));
+
   return {
-    viewBox: `${(cx - w / 2).toFixed(1)} ${(cy - h / 2).toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`,
+    viewBox: `${vx.toFixed(1)} ${vy.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`,
     width: w,
   };
 }

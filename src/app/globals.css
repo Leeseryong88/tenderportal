@@ -1273,16 +1273,18 @@ tr:last-child td {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 620px;
+  max-height: 430px;
   margin: 0 auto;
 }
 
 .world-geography {
-  min-height: 250px;
+  min-height: 240px;
+  aspect-ratio: 2 / 1;
 }
 
 .us-geography {
-  min-height: 300px;
+  min-height: 260px;
+  max-height: 440px;
 }
 
 .geo-country,
