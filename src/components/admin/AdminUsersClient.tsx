@@ -8,6 +8,7 @@ import { useToast } from '@/components/providers/ToastProvider';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Modal } from '@/components/ui/Modal';
 import { ReauthModal } from '@/components/ui/ReauthModal';
+import { SearchableSelect, type SelectOption } from '@/components/ui/SearchableSelect';
 import { StatusPill } from '@/components/ui/StatusPill';
 import type { AccountStatus, Role, SupplierRecord } from '@/types/domain';
 
@@ -133,7 +134,11 @@ export function AdminUsersClient({
   const countFor = (st: AccountStatus | 'ALL') =>
     st === 'ALL' ? users.length : users.filter((u) => u.status === st).length;
 
-  const sortedSuppliers = [...suppliers].sort((a, b) => a.name.localeCompare(b.name));
+  const supplierOptions: SelectOption[] = suppliers.map((s) => ({
+    value: s.id,
+    label: `${s.name} (${s.countryCode})`,
+    keywords: s.countryName,
+  }));
 
   const approveBlockedReason = !selectedUser
     ? ''
@@ -287,19 +292,14 @@ export function AdminUsersClient({
             {targetRole === 'SUPPLIER' && (
               <div className="field">
                 <label htmlFor="user-target-company">{tr('users.linkCompany')} *</label>
-                <select
+                <SearchableSelect
                   id="user-target-company"
                   value={targetCompanyId}
-                  onChange={(e) => setTargetCompanyId(e.target.value)}
-                  data-testid="user-target-company"
-                >
-                  <option value="">{tr('users.selectCompany')}</option>
-                  {sortedSuppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.countryCode})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setTargetCompanyId}
+                  placeholder={tr('users.selectCompany')}
+                  options={supplierOptions}
+                  testId="user-target-company"
+                />
               </div>
             )}
 

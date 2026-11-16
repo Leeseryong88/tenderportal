@@ -26,7 +26,9 @@ import { useToast } from '@/components/providers/ToastProvider';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DownloadButton } from '@/components/ui/DownloadButton';
 import { Modal } from '@/components/ui/Modal';
+import { SearchableSelect, type SelectOption } from '@/components/ui/SearchableSelect';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { compareLabels, matchesSearch } from '@/lib/text/collate';
 import { ScheduleEditor } from '@/components/domain/ScheduleEditor';
 import type {
   ProcurementSchedule,
@@ -160,6 +162,18 @@ export function AdminTendersClient({
   const supplierMap = useMemo(() => new Map(suppliers.map((s) => [s.id, s])), [suppliers]);
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const timeZones = useMemo(() => getSupportedTimeZones(), []);
+  const projectOptions = useMemo<SelectOption[]>(
+    () => projects.map((p) => ({ value: p.id, label: p.name, keywords: `${p.code} ${p.city}` })),
+    [projects]
+  );
+  const typeOptions = useMemo<SelectOption[]>(
+    () => TENDER_TYPES.map((opt) => ({ value: opt, label: trv('category', opt), keywords: opt })),
+    [trv]
+  );
+  const sortedBidders = useMemo(() => {
+    const compare = compareLabels(lang);
+    return [...suppliers].sort((a, b) => compare(a.name, b.name));
+  }, [suppliers, lang]);
 
   const dstResolution = useMemo(() => {
     if (!fDeadlineLocal || !fTimeZone) return null;
@@ -730,27 +744,22 @@ export function AdminTendersClient({
 
               <div className="field">
                 <label>{tr('tenders.project')} *</label>
-                <select
+                <SearchableSelect
+                  ariaLabel={tr('tenders.project')}
                   value={fProjectId}
-                  onChange={(e) => handleProjectChange(e.target.value)}
-                >
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={handleProjectChange}
+                  options={projectOptions}
+                />
               </div>
 
               <div className="field">
                 <label>{tr('tenders.type')}</label>
-                <select value={fType} onChange={(e) => setFType(e.target.value)}>
-                  {TENDER_TYPES.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {trv('category', opt)}
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  ariaLabel={tr('tenders.type')}
+                  value={fType}
+                  onChange={setFType}
+                  options={typeOptions}
+                />
               </div>
 
               <div className="field full">
@@ -844,14 +853,15 @@ export function AdminTendersClient({
                   onChange={(e) => setBidderSearch(e.target.value)}
                 />
                 <div className="bidder-selection-list">
-                  {suppliers
+                  {sortedBidders
                     .filter((s) => {
-                      const q = bidderSearch.trim().toLowerCase();
-                      if (!q) return true;
-                      const mkts = s.coverage.map((c) => c.displayName).join(' ');
-                      return `${s.name} ${supplierTypeCode(s)} ${s.categories.join(' ')} ${mkts}`
-                        .toLowerCase()
-                        .includes(q);
+                      const mkts = s.coverage
+                        .map((c) => `${c.displayName} ${marketDisplayName(c, 'ko')}`)
+                        .join(' ');
+                      return matchesSearch(
+                        `${s.name} ${supplierTypeCode(s)} ${s.categories.join(' ')} ${mkts}`,
+                        bidderSearch
+                      );
                     })
                     .map((s) => {
                       const checked = fBidders.includes(s.id);

@@ -4,11 +4,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/client/api';
 import { emptyProcurementSchedule } from '@/lib/domain/schedule';
 import { getSupportedTimeZones, timeZoneForLocation } from '@/lib/domain/timezone';
-import { countryDisplayName, getCountryAlpha2List } from '@/lib/domain/coverage';
+import { countryDisplayName } from '@/lib/domain/coverage';
+import { countryOptions } from '@/lib/client/selectOptions';
 import { PortalShell } from '@/components/layout/PortalShell';
 import { useLanguage } from '@/components/providers/LanguageProvider';
 import { useToast } from '@/components/providers/ToastProvider';
 import { Modal } from '@/components/ui/Modal';
+import { SearchableSelect, type SelectOption } from '@/components/ui/SearchableSelect';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { ScheduleEditor } from '@/components/domain/ScheduleEditor';
 import type { ProcurementSchedule, ProjectRecord, ProjectStatus } from '@/types/domain';
@@ -139,14 +141,18 @@ export function AdminProjectsClient({
     }
   };
 
-  const availableCountries = useMemo(() => {
-    const map = new Map<string, string>();
+  const availableCountries = useMemo<SelectOption[]>(() => {
+    const map = new Map<string, SelectOption>();
     for (const p of projects) {
       if (p.countryCode) {
-        map.set(p.countryCode, countryDisplayName(p.countryCode, p.countryName, lang));
+        map.set(p.countryCode, {
+          value: p.countryCode,
+          label: countryDisplayName(p.countryCode, p.countryName, lang),
+          keywords: `${p.countryCode} ${p.countryName} ${countryDisplayName(p.countryCode, p.countryName, 'ko')}`,
+        });
       }
     }
-    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    return [...map.values()];
   }, [projects, lang]);
 
   const filtered = useMemo(() => {
@@ -163,14 +169,15 @@ export function AdminProjectsClient({
     });
   }, [projects, search, countryFilter]);
 
-  const typeOptions = useMemo(() => {
-    if (editing && editing.type && !CORE_PROJECT_TYPES.includes(editing.type)) {
-      return [...CORE_PROJECT_TYPES, editing.type];
-    }
-    return CORE_PROJECT_TYPES;
-  }, [editing]);
+  const typeOptions = useMemo<SelectOption[]>(() => {
+    const types =
+      editing && editing.type && !CORE_PROJECT_TYPES.includes(editing.type)
+        ? [...CORE_PROJECT_TYPES, editing.type]
+        : CORE_PROJECT_TYPES;
+    return types.map((tOpt) => ({ value: tOpt, label: trv('projectType', tOpt), keywords: tOpt }));
+  }, [editing, trv]);
 
-  const allCountries = useMemo(() => getCountryAlpha2List(), []);
+  const allCountryOptions = useMemo(() => countryOptions(lang), [lang]);
   const timeZones = useMemo(() => getSupportedTimeZones(), []);
 
   return (
@@ -204,19 +211,15 @@ export function AdminProjectsClient({
           onChange={(e) => setSearch(e.target.value)}
           data-testid="project-search"
         />
-        <select
+        <SearchableSelect
           className="filter"
+          ariaLabel={tr('projects.country')}
           value={countryFilter}
-          onChange={(e) => setCountryFilter(e.target.value)}
-          data-testid="project-country-filter"
-        >
-          <option value="ALL">{tr('projects.allCountries')}</option>
-          {availableCountries.map(([code, label]) => (
-            <option key={code} value={code}>
-              {label}
-            </option>
-          ))}
-        </select>
+          onChange={setCountryFilter}
+          leadingOptions={[{ value: 'ALL', label: tr('projects.allCountries') }]}
+          options={availableCountries}
+          testId="project-country-filter"
+        />
         <div className="grow" />
         <span className="subtle">{tr('projects.countUnit', { count: filtered.length })}</span>
       </div>
@@ -298,21 +301,15 @@ export function AdminProjectsClient({
 
               <div className="field">
                 <label>{tr('projects.country')} *</label>
-                <select
-                  required
+                <SearchableSelect
+                  ariaLabel={tr('projects.country')}
                   value={country}
-                  onChange={(e) => {
-                    const nextC = e.target.value;
+                  onChange={(nextC) => {
                     setCountry(nextC);
                     setTimeZone(timeZoneForLocation(nextC, city));
                   }}
-                >
-                  {allCountries.map((c) => (
-                    <option key={c.code} value={c.en}>
-                      {lang === 'ko' ? c.ko : c.en}
-                    </option>
-                  ))}
-                </select>
+                  options={allCountryOptions}
+                />
               </div>
 
               <div className="field">
@@ -330,13 +327,12 @@ export function AdminProjectsClient({
 
               <div className="field">
                 <label>{tr('projects.type')}</label>
-                <select value={type} onChange={(e) => setType(e.target.value)}>
-                  {typeOptions.map((tOpt) => (
-                    <option key={tOpt} value={tOpt}>
-                      {trv('projectType', tOpt)}
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  ariaLabel={tr('projects.type')}
+                  value={type}
+                  onChange={setType}
+                  options={typeOptions}
+                />
               </div>
 
               <div className="field">

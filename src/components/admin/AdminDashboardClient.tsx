@@ -11,6 +11,7 @@ import { useLanguage } from '@/components/providers/LanguageProvider';
 import { useToast } from '@/components/providers/ToastProvider';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { Modal } from '@/components/ui/Modal';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import type {
   AuditLogRecord,
   DashboardTask,
@@ -725,14 +726,13 @@ export function AdminDashboardClient({
             </div>
             <div className="field">
               <label>{tr('tenders.project')}</label>
-              <select value={taskProjectId} onChange={(e) => setTaskProjectId(e.target.value)}>
-                <option value="">—</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <SearchableSelect
+                ariaLabel={tr('tenders.project')}
+                value={taskProjectId}
+                onChange={setTaskProjectId}
+                leadingOptions={[{ value: '', label: '—' }]}
+                options={projects.map((p) => ({ value: p.id, label: p.name, keywords: p.code }))}
+              />
             </div>
             <div className="field">
               <label>{tr('common.priority')}</label>

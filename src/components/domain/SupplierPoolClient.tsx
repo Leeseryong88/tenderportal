@@ -4,16 +4,16 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/client/api';
 import {
   countryDisplayName,
-  getCountryAlpha2List,
-  getUsStateList,
   marketDisplayName,
   normalizeCoverageList,
   resolveSupplierCoverageForMarket,
 } from '@/lib/domain/coverage';
+import { countryOptions, usStateOptions } from '@/lib/client/selectOptions';
 import { PortalShell } from '@/components/layout/PortalShell';
 import { useLanguage } from '@/components/providers/LanguageProvider';
 import { useToast } from '@/components/providers/ToastProvider';
 import { Modal } from '@/components/ui/Modal';
+import { SearchableSelect, type SelectOption } from '@/components/ui/SearchableSelect';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { SupplierCoverageMap } from '@/components/maps/SupplierCoverageMap';
 import type {
@@ -132,12 +132,24 @@ export function SupplierPoolClient({
     void loadSuppliers();
   }, [loadSuppliers]);
 
-  const allCountries = useMemo(() => getCountryAlpha2List(), []);
-  const sortedSuppliers = useMemo(
-    () => [...suppliers].sort((a, b) => a.name.localeCompare(b.name)),
+  const allOption = useMemo<SelectOption[]>(() => [{ value: 'ALL', label: tr('common.all') }], [tr]);
+  const hqCountryOptions = useMemo(() => countryOptions(lang), [lang]);
+  const stateOptions = useMemo(() => usStateOptions(lang), [lang]);
+  const marketOptions = useMemo(
+    () => [
+      ...countryOptions(lang, tr('suppliers.countries')),
+      ...usStateOptions(lang, tr('suppliers.usStates')),
+    ],
+    [lang, tr]
+  );
+  const categoryOptions = useMemo<SelectOption[]>(
+    () => CATEGORY_OPTIONS.map((c) => ({ value: c, label: trv('category', c), keywords: c })),
+    [trv]
+  );
+  const vendorOptions = useMemo<SelectOption[]>(
+    () => suppliers.map((s) => ({ value: s.id, label: s.name })),
     [suppliers]
   );
-  const usStates = useMemo(() => getUsStateList(), []);
 
   // Filter logic (separates HQ country field from coverage country/subdivision filter)
   const mapBaseSuppliers = useMemo(() => {
@@ -204,7 +216,7 @@ export function SupplierPoolClient({
     });
   }, [mapBaseSuppliers, fCountry, fSubdivision, fDelivery, searchField, searchQuery, tr]);
 
-  const uniqueCoverageCountries = useMemo(() => {
+  const coverageCountryOptions = useMemo<SelectOption[]>(() => {
     const map = new Map<string, string>();
     for (const s of suppliers) {
       for (const c of s.coverage) {
@@ -213,7 +225,11 @@ export function SupplierPoolClient({
         }
       }
     }
-    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    return [...map.entries()].map(([code, label]) => ({
+      value: code,
+      label,
+      keywords: `${code} ${countryDisplayName(code, label, 'en')} ${countryDisplayName(code, label, 'ko')}`,
+    }));
   }, [suppliers, lang]);
 
   const uniqueHqCountries = useMemo(
@@ -377,64 +393,53 @@ export function SupplierPoolClient({
 
           <div className="field">
             <label>{tr('suppliers.serviceCoverage')}</label>
-            <select
+            <SearchableSelect
+              ariaLabel={tr('suppliers.serviceCoverage')}
               value={fCountry}
-              onChange={(e) => {
-                setFCountry(e.target.value);
+              onChange={(v) => {
+                setFCountry(v);
                 setFSubdivision('ALL');
               }}
-              data-testid="pool-country-filter"
-            >
-              <option value="ALL">{tr('common.all')}</option>
-              {uniqueCoverageCountries.map(([code, label]) => (
-                <option key={code} value={code}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              leadingOptions={allOption}
+              options={coverageCountryOptions}
+              testId="pool-country-filter"
+            />
           </div>
 
           <div className="field">
             <label>{tr('suppliers.usState')}</label>
-            <select
+            <SearchableSelect
+              ariaLabel={tr('suppliers.usState')}
               value={fSubdivision}
-              onChange={(e) => {
-                const v = e.target.value;
+              onChange={(v) => {
                 setFSubdivision(v);
                 if (v !== 'ALL') setFCountry('US');
               }}
-            >
-              <option value="ALL">{tr('common.all')}</option>
-              {usStates.map((st) => (
-                <option key={st.code} value={st.code}>
-                  {lang === 'ko' ? `${st.ko} (${st.abbr})` : `${st.en} (${st.abbr})`}
-                </option>
-              ))}
-            </select>
+              leadingOptions={allOption}
+              options={stateOptions}
+            />
           </div>
 
           <div className="field">
             <label>{tr('projects.type')}</label>
-            <select value={fCategory} onChange={(e) => setFCategory(e.target.value)}>
-              <option value="ALL">{tr('common.all')}</option>
-              {CATEGORY_OPTIONS.map((c) => (
-                <option key={c} value={c}>
-                  {trv('category', c)}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              ariaLabel={tr('projects.type')}
+              value={fCategory}
+              onChange={setFCategory}
+              leadingOptions={allOption}
+              options={categoryOptions}
+            />
           </div>
 
           <div className="field">
             <label>{tr('suppliers.company')}</label>
-            <select value={fVendor} onChange={(e) => setFVendor(e.target.value)}>
-              <option value="ALL">{tr('common.all')}</option>
-              {sortedSuppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              ariaLabel={tr('suppliers.company')}
+              value={fVendor}
+              onChange={setFVendor}
+              leadingOptions={allOption}
+              options={vendorOptions}
+            />
           </div>
 
           <div className="field">
@@ -814,13 +819,12 @@ export function SupplierPoolClient({
 
               <div className="field">
                 <label>{tr('suppliers.hqCountry')} *</label>
-                <select value={sCountry} onChange={(e) => setSCountry(e.target.value)}>
-                  {allCountries.map((c) => (
-                    <option key={c.code} value={c.en}>
-                      {lang === 'ko' ? c.ko : c.en}
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  ariaLabel={tr('suppliers.hqCountry')}
+                  value={sCountry}
+                  onChange={setSCountry}
+                  options={hqCountryOptions}
+                />
               </div>
 
               <div className="field">
@@ -918,31 +922,17 @@ export function SupplierPoolClient({
 
                 {sCoverage.map((row, idx) => (
                   <div key={idx} className="coverage-editor-row">
-                    <select
+                    <SearchableSelect
+                      ariaLabel={tr('suppliers.serviceCoverage')}
                       value={row.market}
-                      onChange={(e) => {
-                        const val = e.target.value;
+                      onChange={(val) => {
                         setPreviewFocusIdx(idx);
                         setSCoverage((prev) =>
                           prev.map((r, i) => (i === idx ? { ...r, market: val } : r))
                         );
                       }}
-                    >
-                      <optgroup label={tr('suppliers.countries')}>
-                        {allCountries.map((c) => (
-                          <option key={c.code} value={c.en}>
-                            {lang === 'ko' ? c.ko : c.en}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label={tr('suppliers.usStates')}>
-                        {usStates.map((st) => (
-                          <option key={st.code} value={st.code}>
-                            {lang === 'ko' ? `${st.ko} (${st.abbr})` : `${st.en} (${st.abbr})`}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </select>
+                      options={marketOptions}
+                    />
                     <select
                       value={row.deliveryMode}
                       onChange={(e) => {
@@ -999,20 +989,16 @@ export function SupplierPoolClient({
                 </div>
                 {sContacts.map((c, idx) => (
                   <div key={idx} className="supplier-contact-row">
-                    <select
+                    <SearchableSelect
+                      ariaLabel={tr('common.country')}
                       value={c.country}
-                      onChange={(e) =>
+                      onChange={(val) =>
                         setSContacts((prev) =>
-                          prev.map((r, i) => (i === idx ? { ...r, country: e.target.value } : r))
+                          prev.map((r, i) => (i === idx ? { ...r, country: val } : r))
                         )
                       }
-                    >
-                      {allCountries.map((ct) => (
-                        <option key={ct.code} value={ct.en}>
-                          {lang === 'ko' ? ct.ko : ct.en}
-                        </option>
-                      ))}
-                    </select>
+                      options={hqCountryOptions}
+                    />
                     <input
                       placeholder={tr('common.city')}
                       aria-label={tr('common.city')}
